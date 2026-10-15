@@ -45,7 +45,7 @@ import { cn, plural } from "@/lib/utils";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const PALETTE_GROUPS: { tool: ToolId; label: string }[] = [
-  { tool: "jobs", label: "Job Finder · Hirist" },
+  { tool: "jobs", label: "Jobs · Hirist" },
   { tool: "companies", label: "Salary & culture" },
   { tool: "resume", label: "Resume Studio" },
   { tool: "dsa", label: "DSA Prep" },

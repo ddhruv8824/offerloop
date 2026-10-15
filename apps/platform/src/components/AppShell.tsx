@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div key={group}>
           <p className="mb-2 px-3 text-[10px] font-semibold tracking-widest text-paper/40 uppercase">{group}</p>
           <ul className="flex flex-col gap-0.5">
-            {TOOLS.filter((t) => t.group === group).map((tool) => {
+            {TOOLS.filter((t) => t.group === group && !t.inDashboard).map((tool) => {
               const active = pathname === tool.href || pathname.startsWith(tool.href + "/");
               const Icon = tool.icon;
               return (

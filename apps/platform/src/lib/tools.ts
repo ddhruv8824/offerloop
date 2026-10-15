@@ -30,6 +30,8 @@ export interface ToolModule {
   standalone?: boolean;
   origin?: string;
   status?: ModuleStatus;
+  /** Lives on the dashboard (as its main feed) instead of a page of its own. */
+  inDashboard?: boolean;
 }
 
 export const TOOLS: ToolModule[] = [
@@ -50,13 +52,14 @@ export const TOOLS: ToolModule[] = [
   {
     id: "jobs",
     name: "Job Finder",
-    href: "/jobs",
+    href: "/dashboard",
     icon: Briefcase,
     group: "Tools",
     tagline: "Roles ranked by how well they fit you",
     bring: "Live roles from Hirist and company career pages, ranked against your skills, with weak fits flagged.",
     standalone: true,
     origin: "Hirist + career pages",
+    inDashboard: true,
   },
   {
     id: "dsa",
@@ -95,8 +98,6 @@ export const TOOLS: ToolModule[] = [
 ];
 
 export const TOOL_GROUPS = ["Overview", "Tools", "You"] as const;
-
-export const STANDALONE_TOOLS = TOOLS.filter((t) => t.standalone);
 
 export function getTool(id: string) {
   return TOOLS.find((t) => t.id === id)!;

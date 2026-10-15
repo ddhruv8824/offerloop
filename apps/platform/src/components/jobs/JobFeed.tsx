@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, Check, ExternalLink, FileText, Link2, Loader2, Plus, RefreshCw, Search, SearchX, X } from "lucide-react";
 import { ProfilePrompt } from "@/components/ProfilePrompt";
-import { Badge, Button, ButtonLink, Card, CompanyAvatar, EmptyState, PageHeader, ScoreRing, SkillChip } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, CompanyAvatar, EmptyState, ScoreRing, SkillChip } from "@/components/ui";
 import { importJobLink, useJobSearch, type JobSearchResult } from "@/lib/job-finder";
 import { JobInsightsLine } from "@/components/JobInsightsLine";
 import { SalaryGuide } from "@/components/SalaryGuide";
@@ -16,6 +16,7 @@ import { cn, daysAgo, plural } from "@/lib/utils";
 
 const MIN_SCORES = [0, 50, 65, 80];
 const SHOWN_SKILLS = 8;
+const PAGE_SIZE = 25;
 
 const ageInDays = (iso?: string) => {
   if (!iso) return null;
@@ -28,7 +29,11 @@ const posted = (iso?: string) => {
   return days > 365 ? "over a year ago" : daysAgo(days);
 };
 
-export default function JobFinder() {
+/**
+ * Jobs for you: the main feed of the dashboard. Finding jobs isn't a tool of its own; it
+ * feeds the others (Tailor → Resume Studio, Track → Tracker, workflows → Automations).
+ */
+export function JobFeed() {
   const { profile } = useProfile();
   const tracker = useTracker();
   const search = useJobSearch(profile);
@@ -38,6 +43,9 @@ export default function JobFinder() {
   const [source, setSource] = useState("All sources");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [hideTracked, setHideTracked] = useState(false);
+  // The feed shares the dashboard with progress and tools: show the best few, more on request.
+  const [shown, setShown] = useState(PAGE_SIZE);
+  useEffect(() => setShown(PAGE_SIZE), [query, minScore, source, remoteOnly, hideTracked]);
 
   const [link, setLink] = useState("");
   const [importing, setImporting] = useState(false);
@@ -59,12 +67,12 @@ export default function JobFinder() {
 
   if (!profile) {
     return (
-      <div>
-        <PageHeader title="Job Finder" description="Open roles from Hirist and company career pages, ranked by how well they fit you." />
-        <ProfilePrompt title="Tell Job Finder what you're looking for">
-          It needs your target role, cities and skills to search and rank jobs. Takes about 2 minutes, and every other tool can reuse it.
+      <section id="jobs" aria-labelledby="jobs-title">
+        <FeedHeader description="Open roles from Hirist and company career pages, ranked by how well they fit you." />
+        <ProfilePrompt title="Tell Offerloop what you're looking for">
+          Jobs are searched and ranked from your target role, cities and skills. Takes about 2 minutes, and every tool can reuse it.
         </ProfilePrompt>
-      </div>
+      </section>
     );
   }
 
@@ -88,12 +96,11 @@ export default function JobFinder() {
   const loading = search.status === "loading" || search.status === "idle";
 
   return (
-    <div>
-      <PageHeader
-        title="Job Finder"
-        description={`Open roles for a ${profile.targetRole}${profile.locations.length ? ` in ${profile.locations.join(", ")}` : " anywhere in India"}, ranked against your ${plural(profile.skills.length, "skill")}.`}
-        actions={
-          <Button variant="secondary" onClick={search.refresh} disabled={loading}>
+    <section id="jobs" aria-labelledby="jobs-title">
+      <FeedHeader
+        description={`${profile.targetRole} roles${profile.locations.length ? ` in ${profile.locations.join(", ")}` : " anywhere in India"}, ranked against your ${plural(profile.skills.length, "skill")}.`}
+        action={
+          <Button variant="secondary" className="px-3 py-1.5 text-sm" onClick={search.refresh} disabled={loading}>
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Refresh
           </Button>
         }
@@ -187,19 +194,42 @@ export default function JobFinder() {
                   : "Try adding more cities or skills to your profile, or paste a job link above."}
               </EmptyState>
             ) : (
-              <ul className="divide-y divide-line">
-                {jobs.map((job) => (
-                  <JobRow key={job.id} job={job} profile={profile} tracked={trackedUrls.has(job.url)} onTrack={() => track(job)} isNew={search.newIds.has(job.id)} />
-                ))}
-              </ul>
+              <>
+                <ul className="divide-y divide-line">
+                  {jobs.slice(0, shown).map((job) => (
+                    <JobRow key={job.id} job={job} profile={profile} tracked={trackedUrls.has(job.url)} onTrack={() => track(job)} isNew={search.newIds.has(job.id)} />
+                  ))}
+                </ul>
+                {jobs.length > shown && (
+                  <div className="border-t border-line p-3 text-center">
+                    <Button variant="secondary" className="px-4 py-1.5 text-sm" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+                      Show {Math.min(PAGE_SIZE, jobs.length - shown)} more
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
           <p className="mt-3 text-xs text-muted">
-            Showing {jobs.length} of {result.jobs.length} best matches. Green skills are on your profile; dashed ones aren&apos;t. Apply on the company&apos;s page, or let an
+            Showing {Math.min(shown, jobs.length)} of {jobs.length} best matches. Green skills are on your profile; dashed ones aren&apos;t. Apply on the company&apos;s page, or let an
             automation apply on Hirist after you approve.
           </p>
         </>
       )}
+    </section>
+  );
+}
+
+function FeedHeader({ description, action }: { description: string; action?: ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h2 id="jobs-title" className="text-lg font-semibold">
+          Jobs for you
+        </h2>
+        <p className="mt-0.5 text-sm text-muted">{description}</p>
+      </div>
+      {action}
     </div>
   );
 }
