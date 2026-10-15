@@ -18,8 +18,6 @@ const pnpmRun = (filter, script = "dev") => (
 const services = [
   // Redline API (internal :8100)
   { name: "redline", color: 35, cmd: python, args: [join(root, "services", "redline-api", "run.py")], cwd: root },
-  // Aria API (internal :8000)
-  { name: "aria-api", color: 33, cmd: python, args: [join(root, "services", "aria-api", "run.py")], cwd: root },
   // Code runner API (internal :8001)
   { name: "code-runner", color: 32, ...pnpmRun("@offerloop/code-runner"), cwd: root },
   // Next.js Platform (public gateway :3100)

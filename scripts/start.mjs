@@ -13,11 +13,9 @@ const port = process.env.PORT ?? "3100";
 
 // In Docker, Python packages are installed system-wide; locally run.py uses its own .venv.
 const redlineArgs = [join(root, "services", "redline-api", "run.py"), "--no-reload", ...(process.env.REDLINE_SYSTEM_PYTHON ? ["--system"] : [])];
-const ariaArgs = [join(root, "services", "aria-api", "run.py"), "--no-reload", ...(process.env.ARIA_SYSTEM_PYTHON ? ["--system"] : [])];
 
 supervise([
   { name: "redline", color: 35, cmd: python, args: redlineArgs, cwd: root },
-  { name: "aria-api", color: 33, cmd: python, args: ariaArgs, cwd: root },
   {
     name: "code-runner",
     color: 32,

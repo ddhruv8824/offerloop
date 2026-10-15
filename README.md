@@ -139,13 +139,11 @@ launch needs Google's verification.
 offerloop/
 ├── apps/
 │   ├── platform/          Next.js app: landing, dashboard, automations, tool pages (:3100)
-│   ├── aria/              Voice interview app from Aria (:3000)
 │   └── code-editor/       Monaco code editor & runner from Bro-Code (:3001)
 ├── modules/
 │   └── resume-studio/     Redline's UI as <ResumeStudio apiUrl embedded />
 ├── services/
 │   ├── redline-api/       Redline's FastAPI backend + ai/ (LangGraph) (:8100)
-│   ├── aria-api/          Aria's Voice AI FastAPI backend + ai/ (:8000)
 │   ├── code-runner/       TypeScript Express code execution engine (:8001)
 │   └── job-agent/         Job application & discovery agent (Prisma, LangGraph)
 ├── scripts/               dev.mjs / start.mjs (supervises all services), supervise.mjs
@@ -159,10 +157,8 @@ offerloop/
 | `pnpm dev` | Runs the Next.js platform (:3100) + all backend services concurrently |
 | `pnpm dev:platform` | Runs only the main Offerloop web platform (:3100) |
 | `pnpm dev:redline` | Runs only the Redline resume tailoring API (:8100) |
-| `pnpm dev:aria` | Runs only the Aria AI interviewer API (:8000) |
 | `pnpm dev:code-runner`| Runs only the Bro-Code execution API (:8001) |
 | `pnpm dev:job-agent` | Runs the Job Apply Agent |
-| `pnpm dev:aria-web` | Runs the standalone Aria web frontend (:3000) |
 | `pnpm dev:code-editor`| Runs the standalone Bro-Code web editor (:3001) |
 | `pnpm build` | Builds the platform for production |
 | `pnpm start` | Runs the full production stack on a single server |

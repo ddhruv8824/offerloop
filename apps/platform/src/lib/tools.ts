@@ -76,9 +76,8 @@ export const TOOLS: ToolModule[] = [
     icon: Mic,
     group: "Tools",
     tagline: "Voice mock interviews with a scorecard",
-    bring: "Pick a company and round, talk to Aria, get scored feedback at the end.",
+    bring: "Pick a company and round, practice out loud, get scored feedback at the end.",
     standalone: true,
-    origin: "Aria",
     status: "planned",
   },
   {

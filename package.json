@@ -6,8 +6,6 @@
     "dev": "node scripts/dev.mjs",
     "dev:platform": "pnpm --filter @offerloop/platform dev",
     "dev:redline": "python services/redline-api/run.py",
-    "dev:aria": "python services/aria-api/run.py",
-    "dev:aria-web": "pnpm --filter @offerloop/aria-web dev",
     "dev:code-runner": "pnpm --filter @offerloop/code-runner dev",
     "dev:code-editor": "pnpm --filter @offerloop/code-editor dev",
     "dev:job-agent": "pnpm --filter @offerloop/job-agent dev",

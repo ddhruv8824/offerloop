@@ -1,7 +1,7 @@
 /**
  * Sample data for the frontend-first phase. Companies are fictional. Each block
  * is replaced by a real source later: jobs → Job-apply-tool + ATS connectors,
- * tracker → shared Postgres tracker, interview practice → Aria, companies →
+ * tracker → shared Postgres tracker, interview practice → Interview Coach (coming soon), companies →
  * company-intel fetcher.
  */
 import type {
