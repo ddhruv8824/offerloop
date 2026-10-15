@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Next.js & Build Outputs
+.next/
+**/dist/
+**/out/
+**/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python Virtual Environments & Bytecode
+.venv/
+venv/
+**/venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment Secrets
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+!**/.env.example
+
+# Runtime Data, Logs & Databases
+.data/
+**/.data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.log
+browser-data/
+.cache/
+playwright-report/
+test-results/
+
+# Personal files and downloads in the job agent's data folder: keep only the example profile.
+services/job-agent/data/*
+!services/job-agent/data/applicationProfile.json.example
+
+# Local editor / assistant settings
+**/.claude/settings.local.json
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

@@ -1,0 +1,85 @@
+@import "tailwindcss";
+/* Tool modules: their tokens, plus their source files so Tailwind generates their classes. */
+@import "../../../../modules/resume-studio/src/styles.css";
+@source "../../../../modules/resume-studio/src";
+
+/*
+  Offerloop design tokens — the same "Architectural Monolith" family as Redline
+  (ink chrome, warm paper canvas, one coral accent). Use these, never raw hex.
+*/
+@theme {
+  --color-ink: oklch(0.1859 0.0069 258.4);
+  --color-ink-soft: oklch(0.2808 0.0113 237.1);
+  --color-ink-line: oklch(0.947 0.0074 80.7 / 0.1);
+  --color-canvas: oklch(0.965 0.006 80.7);
+  --color-paper: oklch(0.995 0.002 80);
+  --color-line: oklch(0.88 0.008 80);
+  --color-text: oklch(0.24 0.01 258);
+  --color-muted: oklch(0.52 0.01 258);
+  --color-faint: oklch(0.72 0.008 80);
+  --color-coral: oklch(0.7 0.16 32);
+  --color-coral-strong: oklch(0.6 0.17 32);
+  --color-coral-wash: oklch(0.95 0.03 40);
+  --color-success: oklch(0.6 0.12 160);
+  --color-success-wash: oklch(0.95 0.035 160);
+  --color-warning: oklch(0.68 0.13 75);
+  --color-warning-wash: oklch(0.96 0.04 85);
+  --color-danger: oklch(0.577 0.2 27.3);
+  --color-danger-wash: oklch(0.955 0.03 25);
+  --color-info: oklch(0.55 0.11 250);
+  --color-info-wash: oklch(0.95 0.025 250);
+
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --animate-fade-in: fade-in 220ms ease-out both;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-coral);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-faint) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+}

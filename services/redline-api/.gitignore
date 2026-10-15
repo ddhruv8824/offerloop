@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Personal resume data, chat checkpoints, JD cache
+backend/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

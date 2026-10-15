@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.tsbuildinfo
+# Secrets and personal data never go into the image
+**/.env
+**/.env.*
+!**/.env.example
+services/redline-api/backend/data
+.git

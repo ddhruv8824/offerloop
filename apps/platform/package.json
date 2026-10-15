@@ -1,0 +1,32 @@
+{
+  "name": "@offerloop/platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3100 --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --port 3100",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --test scripts/email-classifier.test.mjs scripts/jobs.test.mjs scripts/schedule.test.mjs scripts/company-info.test.mjs scripts/salary.test.mjs"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.0",
+    "@fontsource/manrope": "^5.2.0",
+    "@fontsource/sora": "^5.2.0",
+    "@offerloop/resume-studio": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.553.0",
+    "next": "16.2.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.3"
+  }
+}
