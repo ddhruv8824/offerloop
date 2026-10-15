@@ -6,42 +6,51 @@ into this platform, and all of them read one shared career profile.
 
 ## Run it
 
-Requirements: Node 20+, pnpm 10, Python 3.11+.
+Requirements: Node 20+, pnpm 10.
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Everything runs behind **one port**, http://localhost:3100:
-
-```
-browser ──► :3100  Next.js platform (the only public port)
-              ├── pages, /api/inbox/*            platform
-              └── /api/redline/*  ──proxy──►     :8100 Redline API (127.0.0.1 only)
-```
-
-`pnpm dev` starts both (`scripts/dev.mjs`); one Ctrl+C stops both, and if one crashes the
-other is stopped too. The first run creates `services/redline-api/backend/.venv` and
-installs the Python requirements. Only one part: `pnpm dev:platform` / `pnpm dev:redline`.
-
-The proxy (`apps/platform/src/app/api/redline/[...path]/route.ts`) streams both ways, so
-resume uploads and live tailoring progress pass straight through; it only forwards
-`/api/v1/*`, so Redline's `/docs` stays private. To run Redline elsewhere later, set
-`REDLINE_INTERNAL_URL` — the frontend doesn't change.
+Everything is one Next.js app on http://localhost:3100 — pages and APIs, including Resume
+Studio's engine (`/api/redline/*`, served in-process by `modules/resume-studio/src/server`).
 
 ### Deploy (one container)
 
 ```bash
-pnpm build && pnpm start          # production locally: same two processes, one port
+pnpm build && pnpm start          # production locally, same single process
 docker build -t offerloop .
 docker run -p 3100:3100 -v offerloop-data:/data --env-file apps/platform/.env.local offerloop
 ```
 
-The image runs `scripts/start.mjs`: the built platform on `$PORT` and Redline on
-127.0.0.1:8100. Resume workspaces live in the `/data` volume — without it they're lost on
-redeploy. Works on any host that runs a Docker image (Railway, Render, Fly.io); the host
-must allow long-running responses (streaming) — serverless platforms like Vercel don't fit.
+Saved workflows and Resume Studio workspaces live in the `/data` volume — without it
+they're lost on redeploy. Works on any host that runs a Docker image (Railway, Render,
+Fly.io); the host must allow long-running responses (tailoring streams its progress) and
+a disk that survives restarts, so serverless platforms like Vercel don't fit yet.
+
+### Resume Studio
+
+Upload a resume, paste a job description, review every edit as a redline, download the PDF.
+`modules/resume-studio` is both halves: the React UI (`src/`) and the engine
+(`src/server/`, imported as `@offerloop/resume-studio/server`):
+
+- **AI** — bring your own key: Gemini, OpenAI, Claude or Groq, through the Vercel AI SDK.
+  The key travels per request (`X-LLM-Key`) and is never stored or logged. Optional
+  server-side keys go in `apps/platform/.env.local` (see `.env.example`).
+- **Tailoring** (`tailor.ts`) — analyse the JD (cached per JD), propose edits, review them
+  against the master profile (`validation.ts`: flags unverified skills and numbers, never
+  edits company/title/dates/education), then score ATS keywords before → after. Every
+  step is saved as the run's log ("Run log" in the UI).
+- **Chat** (`chat.ts`) — edit, answer or record a fact the user states; remembers the
+  conversation per workspace.
+- **Files** (`extract.ts`) — PDFs go to the model as-is where it can read them; Groq gets
+  column-aware extracted text (two-column resumes are read column by column).
+- **Storage** (`store.ts`) — JSON files under `<OFFERLOOP_DATA_DIR>/redline`
+  (`apps/platform/.data/redline` locally), one folder per browser workspace.
+
+`pnpm --filter @offerloop/resume-studio test` runs the engine's tests with the model scripted,
+so no key is needed.
 
 ### Job Finder
 
@@ -90,7 +99,7 @@ the ones that respond.
 Workflows run on the server, so they work with the browser closed.
 
 - **Storage** — `apps/platform/.data/automations.json` (override with `OFFERLOOP_DATA_DIR`;
-  `/data/platform` in Docker): workflows, the last 100 runs, the profile to search with, and
+  `/data` in Docker): workflows, the last 100 runs, the profile to search with, and
   which jobs each workflow has already reported. One file, no database. Single-user until
   accounts exist.
 - **Scheduler** — `src/instrumentation.ts` starts `lib/server/automations/scheduler.ts` when
@@ -138,27 +147,20 @@ launch needs Google's verification.
 ```
 offerloop/
 ├── apps/
-│   ├── platform/          Next.js app: landing, dashboard, automations, tool pages (:3100)
-│   └── code-editor/       Monaco code editor & runner from Bro-Code (:3001)
+│   └── platform/          Next.js app: landing, dashboard, tools, all APIs (:3100)
 ├── modules/
-│   └── resume-studio/     Redline's UI as <ResumeStudio apiUrl embedded />
+│   └── resume-studio/     Resume Studio: <ResumeStudio apiUrl embedded /> + its engine (./server)
 ├── services/
-│   ├── redline-api/       Redline's FastAPI backend + ai/ (LangGraph) (:8100)
-│   ├── code-runner/       TypeScript Express code execution engine (:8001)
-│   └── job-agent/         Job application & discovery agent (Prisma, LangGraph)
-├── scripts/               dev.mjs / start.mjs (supervises all services), supervise.mjs
-└── Dockerfile             Unified single-container deployment image
+│   └── job-agent/         Job application & discovery agent (runs locally, not deployed)
+└── Dockerfile             Single-container deployment image
 ```
 
-### Monorepo Commands
+### Commands
 
 | Command | What it runs |
 |---|---|
-| `pnpm dev` | Runs the Next.js platform (:3100) + all backend services concurrently |
-| `pnpm dev:platform` | Runs only the main Offerloop web platform (:3100) |
-| `pnpm dev:redline` | Runs only the Redline resume tailoring API (:8100) |
-| `pnpm dev:code-runner`| Runs only the Bro-Code execution API (:8001) |
-| `pnpm dev:job-agent` | Runs the Job Apply Agent |
-| `pnpm dev:code-editor`| Runs the standalone Bro-Code web editor (:3001) |
-| `pnpm build` | Builds the platform for production |
-| `pnpm start` | Runs the full production stack on a single server |
+| `pnpm dev` | The platform in development (:3100) |
+| `pnpm build` / `pnpm start` | Production build / server |
+| `pnpm test` | Platform and Resume Studio tests |
+| `pnpm typecheck` | TypeScript checks in every package |
+| `pnpm dev:job-agent` | The Job Apply Agent |

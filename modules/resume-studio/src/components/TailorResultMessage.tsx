@@ -100,7 +100,7 @@ export function TailorResultMessage({
                 href={getApiUrl(`/api/v1/tailor/threads/${encodeURIComponent(version.thread_id)}/history`)}
                 target="_blank"
                 rel="noreferrer"
-                title="Every LangGraph step of this run, with the data it produced"
+                title="Every step of this run, with the data it produced"
                 className="font-am-mono text-[10px] uppercase tracking-[0.12em] text-am-muted underline-offset-2 hover:text-am-canvas hover:underline"
               >
                 Run log

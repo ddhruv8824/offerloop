@@ -1,5 +1,5 @@
 // Apply tailor changes to resume JSON as a patch.
-// Mirror of ai/services/tailor/patch.py — keep the two in sync.
+// Shared by the browser and the engine (src/server), so both apply edits identically.
 // The base resume is never mutated: rejecting a change = re-applying the rest.
 
 import type { ChangeStatus, ExperienceItem, ProjectItem, Resume, TailorChange } from "./types";

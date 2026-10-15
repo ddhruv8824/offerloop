@@ -3,16 +3,11 @@
   "private": true,
   "packageManager": "pnpm@10.13.1",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:platform": "pnpm --filter @offerloop/platform dev",
-    "dev:redline": "python services/redline-api/run.py",
-    "dev:code-runner": "pnpm --filter @offerloop/code-runner dev",
-    "dev:code-editor": "pnpm --filter @offerloop/code-editor dev",
+    "dev": "pnpm --filter @offerloop/platform dev",
     "dev:job-agent": "pnpm --filter @offerloop/job-agent dev",
     "build": "pnpm --filter @offerloop/platform build",
-    "build:all": "pnpm -r build",
-    "start": "node scripts/start.mjs",
+    "start": "pnpm --filter @offerloop/platform start",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm --filter @offerloop/platform test"
+    "test": "pnpm --filter @offerloop/platform --filter @offerloop/resume-studio test"
   }
 }

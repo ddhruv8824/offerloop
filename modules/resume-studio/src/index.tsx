@@ -6,7 +6,7 @@ import { setApiUrl } from "./lib/api";
 import { resolveWorkspace } from "./lib/workspace";
 
 export interface ResumeStudioProps {
-  /** Where the Redline API runs, e.g. http://127.0.0.1:8100. */
+  /** Where the host app mounted the engine (`@offerloop/resume-studio/server`), e.g. /api/redline. */
   apiUrl: string;
   /** Fill the parent element instead of the whole screen. */
   embedded?: boolean;

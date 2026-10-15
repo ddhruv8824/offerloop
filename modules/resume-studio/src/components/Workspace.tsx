@@ -754,8 +754,8 @@ export function Workspace({ workspace, embedded = false }: WorkspaceProps) {
         >
           <WifiOff className="h-4 w-4 shrink-0 text-am-coral" />
           <span>
-            Can&apos;t reach the Redline API at <span className="font-am-mono text-xs">{getApiUrl("")}</span>. Start it
-            with <span className="font-am-mono text-xs">python start.py</span> in <span className="font-am-mono text-xs">redline/</span>, then retry.
+            Can&apos;t reach Resume Studio&apos;s server at <span className="font-am-mono text-xs">{getApiUrl("")}</span>. Check
+            that the app is running, then retry.
           </span>
           <AmButton variant="outline" size="sm" className="ml-auto" onClick={() => setAttempt((n) => n + 1)}>
             <RefreshCw className="h-3.5 w-3.5" /> Retry

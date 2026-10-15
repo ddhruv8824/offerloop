@@ -1,6 +1,6 @@
-// The host app sets the Redline API address once (see `ResumeStudio`'s `apiUrl`),
-// so this module works under Vite, Next.js or anything else.
-let API_URL = "http://127.0.0.1:8100";
+// The host app sets the API address once (see `ResumeStudio`'s `apiUrl`) — wherever it
+// mounted the engine from `@offerloop/resume-studio/server`.
+let API_URL = "/api/redline";
 
 export function setApiUrl(url: string): void {
   API_URL = url;

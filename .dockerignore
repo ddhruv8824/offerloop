@@ -8,5 +8,5 @@
 **/.env
 **/.env.*
 !**/.env.example
-services/redline-api/backend/data
+**/.data
 .git

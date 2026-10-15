@@ -2,31 +2,43 @@
   "name": "@offerloop/resume-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Redline's resume tailoring UI as a reusable React component.",
+  "description": "Redline resume tailoring: the React UI and its server engine (./server).",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
   "exports": {
     ".": "./src/index.tsx",
+    "./server": "./src/server/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --no-warnings --test tests/*.test.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.80",
+    "@ai-sdk/google": "4.0.96",
+    "@ai-sdk/groq": "4.0.61",
+    "@ai-sdk/openai": "4.0.94",
     "@react-pdf/renderer": "^4.9.0",
+    "ai": "7.0.141",
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",
-    "tailwind-merge": "^3.7.0"
+    "mammoth": "1.13.0",
+    "tailwind-merge": "^3.7.0",
+    "unpdf": "1.8.1",
+    "zod": "4.6.7"
   },
   "peerDependencies": {
     "react": "^19",
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tsx": "4.23.15",
     "typescript": "^5.9.3"
   }
 }

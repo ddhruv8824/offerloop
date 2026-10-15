@@ -1,4 +1,4 @@
-// Deterministic ATS keyword score — mirror of backend/app/services/ats.py (keep in sync).
+// Deterministic ATS keyword score — shared by the browser and the engine (src/server).
 // A keyword counts if the term or any alias appears, singular or plural.
 
 import { applyActiveChanges } from "./patch";

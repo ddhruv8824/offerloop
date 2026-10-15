@@ -13,7 +13,7 @@ const ResumeStudio = dynamic(() => import("@offerloop/resume-studio"), {
   ),
 });
 
-// Same origin: /api/redline/* is proxied to the internal Redline service (see app/api/redline).
+// Same origin: /api/redline/* runs Resume Studio's engine in this app (see app/api/redline).
 const REDLINE_API_URL = "/api/redline";
 
 export default function ResumeStudioPage() {

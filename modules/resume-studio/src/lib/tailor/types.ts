@@ -1,4 +1,4 @@
-// Redline — shapes shared with backend/app/routers/tailor.py
+// Redline — shapes shared by the UI and the engine (src/server)
 
 export interface Bullet {
   id: string;
@@ -145,7 +145,7 @@ export interface AtsResult {
 }
 
 export interface TailorResult {
-  /** LangGraph thread of this run — its step-by-step log is at /tailor/threads/{id}/history. */
+  /** This run's id — its step-by-step log is at /tailor/threads/{id}/history. */
   thread_id?: string;
   jd_hash: string;
   jd_analysis: JdAnalysis;
@@ -185,7 +185,7 @@ export interface ResumeVersion {
   rejected: RejectedChange[];
   gaps: Gap[];
   gap_answers: Record<string, GapAnswer>;
-  /** LangGraph thread of the tailoring run that produced this version. */
+  /** The tailoring run that produced this version (see TailorResult.thread_id). */
   thread_id?: string;
 }
 
