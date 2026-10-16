@@ -18,10 +18,13 @@ Studio's engine (`/api/redline/*`, served in-process by `modules/resume-studio/s
 
 ### Deploy
 
-**Oracle Cloud (free):** step-by-step in [`deploy/ORACLE.md`](deploy/ORACLE.md) — one VM
-running the app plus Caddy for HTTPS (`deploy/docker-compose.yml`).
+**Render (recommended):** [`render.yaml`](render.yaml) sets up everything — step-by-step in
+[`deploy/RENDER.md`](deploy/RENDER.md). Starter instance + 1 GB disk, about $7/month.
 
-Any other host that runs a Docker image works too (Railway, Render, Fly.io):
+**Your own server** (e.g. Oracle Cloud's free VM): [`deploy/ORACLE.md`](deploy/ORACLE.md) —
+the app plus Caddy for HTTPS (`deploy/docker-compose.yml`).
+
+Any other host that runs a Docker image works too (Railway, Fly.io):
 
 ```bash
 pnpm build && pnpm start          # production locally
@@ -36,7 +39,7 @@ its progress), so serverless platforms like Vercel don't fit yet. Run one copy o
 **Before going public**, set `APP_PASSWORD`: every page and API then needs that password
 once per browser (`src/proxy.ts`). Without it the site is open — fine on your own PC only.
 Behind a proxy, set `PUBLIC_URL` (e.g. `https://offerloop.example.com`) so redirects and
-the Gmail callback use the public address.
+the Gmail callback use the public address (on Render it's picked up automatically).
 
 ### Resume Studio
 

@@ -31,7 +31,7 @@ ENV NODE_ENV=production \
     OFFERLOOP_DATA_DIR=/data \
     NEXT_TELEMETRY_DISABLED=1
 
-VOLUME /data
+# Mount a persistent disk or volume at /data (Render disk, docker compose volume).
 EXPOSE 3100
 
 CMD ["sh", "-c", "exec node node_modules/next/dist/bin/next start --port \"$PORT\" --hostname 0.0.0.0"]

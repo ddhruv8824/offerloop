@@ -19,7 +19,7 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Everything except the login itself, Next's static files and images, and the backup
-  // scheduler trigger (it checks its own CRON_SECRET).
-  matcher: ["/((?!login|api/login|api/automations/tick|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp|woff2?)$).*)"],
+  // Everything except the login itself, the health check, Next's static files and images,
+  // and the backup scheduler trigger (it checks its own CRON_SECRET).
+  matcher: ["/((?!login|api/login|api/health|api/automations/tick|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp|woff2?)$).*)"],
 };
