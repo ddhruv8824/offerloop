@@ -16,18 +16,27 @@ pnpm dev
 Everything is one Next.js app on http://localhost:3100 — pages and APIs, including Resume
 Studio's engine (`/api/redline/*`, served in-process by `modules/resume-studio/src/server`).
 
-### Deploy (one container)
+### Deploy
+
+**Oracle Cloud (free):** step-by-step in [`deploy/ORACLE.md`](deploy/ORACLE.md) — one VM
+running the app plus Caddy for HTTPS (`deploy/docker-compose.yml`).
+
+Any other host that runs a Docker image works too (Railway, Render, Fly.io):
 
 ```bash
-pnpm build && pnpm start          # production locally, same single process
+pnpm build && pnpm start          # production locally
 docker build -t offerloop .
 docker run -p 3100:3100 -v offerloop-data:/data --env-file apps/platform/.env.local offerloop
 ```
 
-Saved workflows and Resume Studio workspaces live in the `/data` volume — without it
-they're lost on redeploy. Works on any host that runs a Docker image (Railway, Render,
-Fly.io); the host must allow long-running responses (tailoring streams its progress) and
-a disk that survives restarts, so serverless platforms like Vercel don't fit yet.
+Saved workflows and Resume Studio workspaces live in `/data` — mount a volume there or
+they're lost on redeploy. The host must allow long-running responses (tailoring streams
+its progress), so serverless platforms like Vercel don't fit yet. Run one copy only.
+
+**Before going public**, set `APP_PASSWORD`: every page and API then needs that password
+once per browser (`src/proxy.ts`). Without it the site is open — fine on your own PC only.
+Behind a proxy, set `PUBLIC_URL` (e.g. `https://offerloop.example.com`) so redirects and
+the Gmail callback use the public address.
 
 ### Resume Studio
 

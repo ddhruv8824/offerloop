@@ -1,0 +1,37 @@
+# Offerloop on one server (e.g. Oracle Cloud's free VM): the app, plus Caddy in front of
+# it for HTTPS — Caddy gets and renews a free Let's Encrypt certificate by itself.
+#
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --build
+#
+# See deploy/ORACLE.md for the full walkthrough.
+
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - offerloop-data:/data # workflows + Resume Studio workspaces; survives rebuilds
+    expose:
+      - "3100" # reachable by Caddy only, not from the internet
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # the HTTPS certificates
+      - caddy-config:/config
+
+volumes:
+  offerloop-data:
+  caddy-data:
+  caddy-config:

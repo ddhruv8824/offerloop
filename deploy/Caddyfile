@@ -1,0 +1,8 @@
+# HTTPS for $DOMAIN, forwarded to the app. Caddy redirects http:// to https:// itself.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3100 {
+		# Send tailoring progress (Server-Sent Events) to the browser as it happens.
+		flush_interval -1
+	}
+}

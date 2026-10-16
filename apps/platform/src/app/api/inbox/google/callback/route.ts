@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookieOptions, exchangeCode, seal, STATE_COOKIE, TOKEN_COOKIE } from "@/lib/server/inbox";
+import { publicOrigin, publicUrl } from "@/lib/server/public-url";
 
 export const dynamic = "force-dynamic";
 
-const back = (req: NextRequest, result: string) => new URL(`/tracker?inbox=${result}`, req.url);
+const back = (req: NextRequest, result: string) => publicUrl(req, `/tracker?inbox=${result}`);
 
 /** Google sends the user back here with a code; swap it for a refresh token and keep it sealed in a cookie. */
 export async function GET(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!code || !state || state !== expected) return NextResponse.redirect(back(req, "failed"));
 
   try {
-    const stored = await exchangeCode(code, req.nextUrl.origin);
+    const stored = await exchangeCode(code, publicOrigin(req));
     const res = NextResponse.redirect(back(req, "connected"));
     res.cookies.set(TOKEN_COOKIE, seal(stored), cookieOptions(60 * 60 * 24 * 180));
     res.cookies.delete(STATE_COOKIE);

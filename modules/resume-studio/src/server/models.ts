@@ -199,7 +199,7 @@ export function friendlyError(cfg: LlmConfig, err: unknown): string {
   const text = cause instanceof Error ? cause.message : String(cause);
   const lowered = text.toLowerCase();
   const status = (cause as { statusCode?: number; status?: number })?.statusCode ?? (cause as { status?: number })?.status;
-  if (status === 401 || status === 403 || (lowered.includes("api key") && /invalid|incorrect/.test(lowered))) {
+  if (status === 401 || status === 403 || (lowered.includes("api key") && /invalid|incorrect|not valid/.test(lowered))) {
     return `${label} rejected the API key. Check it in AI settings.`;
   }
   if (status === 404 || (lowered.includes("not found") && lowered.includes("model"))) {
