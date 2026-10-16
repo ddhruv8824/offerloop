@@ -13,11 +13,13 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/
 COPY modules/resume-studio/package.json modules/resume-studio/
+COPY shared/storage/package.json shared/storage/
 COPY services/job-agent/package.json services/job-agent/
 RUN pnpm install --frozen-lockfile
 
 COPY apps/platform ./apps/platform
 COPY modules ./modules
+COPY shared ./shared
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @offerloop/platform build
 
@@ -25,13 +27,14 @@ FROM node:22-slim
 COPY --from=build /app /app
 WORKDIR /app/apps/platform
 
-# Saved workflows (automations.json) and Resume Studio workspaces (redline/) live in /data.
+# Saved workflows (automations.json) and Resume Studio workspaces (redline/) live in /data —
+# or in a Postgres database (e.g. Supabase) when DATABASE_URL is set.
 ENV NODE_ENV=production \
     PORT=3100 \
     OFFERLOOP_DATA_DIR=/data \
     NEXT_TELEMETRY_DISABLED=1
 
-# Mount a persistent disk or volume at /data (Render disk, docker compose volume).
+# Without DATABASE_URL, mount a persistent disk or volume at /data.
 EXPOSE 3100
 
 CMD ["sh", "-c", "exec node node_modules/next/dist/bin/next start --port \"$PORT\" --hostname 0.0.0.0"]

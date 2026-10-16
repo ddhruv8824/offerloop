@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { beforeEach, test } from "node:test";
+import { after, beforeEach, test } from "node:test";
+import postgres from "postgres";
+import { closeStorage } from "@offerloop/storage";
 
 import { atsScore } from "../src/lib/tailor/ats";
 import { applyChanges } from "../src/lib/tailor/patch";
@@ -21,9 +23,25 @@ import { runChat } from "../src/server/chat";
 import { runTailor } from "../src/server/tailor";
 import { validateChanges, type ProposedEdit } from "../src/server/validation";
 
-// Every test gets its own data folder.
-beforeEach(() => {
+// With TEST_DATABASE_URL (a throwaway Postgres!) the suite runs against the database
+// backend instead of files; its Resume Studio rows are wiped before every test.
+const testDb = process.env.TEST_DATABASE_URL;
+const sql = testDb ? postgres(testDb, { onnotice: () => {} }) : null;
+if (testDb) process.env.DATABASE_URL = testDb;
+else delete process.env.DATABASE_URL;
+
+// Every test starts with no saved data.
+beforeEach(async () => {
   process.env.REDLINE_DATA_DIR = mkdtempSync(path.join(tmpdir(), "redline-test-"));
+  if (sql) {
+    await store.loadWorkspace("init"); // creates the table on first use
+    await sql`delete from offerloop_kv where key like 'redline/%'`;
+  }
+});
+
+after(async () => {
+  await closeStorage();
+  await sql?.end();
 });
 
 const RAW = {
@@ -181,7 +199,8 @@ test("resolveConfig validates its input and keeps the key out of logs", () => {
 
 test("storage rejects unsafe workspace ids", async () => {
   await store.saveMasterProfile("default", { notes: "x" } as never);
-  assert.ok(existsSync(path.join(store.dataDir(), "workspaces", "default", "master_profile.json")));
+  assert.deepEqual((await store.loadWorkspace("default")).master_profile, { notes: "x" });
+  if (!sql) assert.ok(existsSync(path.join(store.dataDir(), "workspaces", "default", "master_profile.json")));
   for (const bad of ["../etc", "a/b", "", "x".repeat(65)]) {
     await assert.rejects(store.saveMasterProfile(bad, {} as never), RangeError);
   }
@@ -310,8 +329,9 @@ const collect = async <T>(events: AsyncGenerator<T>) => {
   return out;
 };
 
-/** Every file under the data folder, as one string — to check what was saved. */
-function savedData(): string {
+/** Everything saved (files or database rows), as one string — to check what was saved. */
+async function savedData(): Promise<string> {
+  if (sql) return (await sql<{ value: string }[]>`select value from offerloop_kv`).map((r) => r.value).join("\n");
   const read = (dir: string): string =>
     readdirSync(dir, { withFileTypes: true })
       .map((e) => (e.isDirectory() ? read(path.join(dir, e.name)) : readFileSync(path.join(dir, e.name), "utf8")))
@@ -350,7 +370,7 @@ test("tailoring runs every step and logs them", async () => {
   assert.equal((await call("GET", "/api/v1/tailor/threads/..%2F..%2Fetc/history")).status, 400);
 
   // the API key is never saved
-  assert.ok(!savedData().includes(SECRET));
+  assert.ok(!(await savedData()).includes(SECRET));
 });
 
 test("the JD analysis is cached per job description", async () => {
@@ -411,7 +431,7 @@ test("chat routes by action and remembers the conversation", async () => {
 
   const log = await (await call("GET", "/api/v1/tailor/threads/ws1:chat/history")).json();
   assert.deepEqual(log.steps.map((s: { node: string }) => s.node), ["input", "decide", "input", "decide", "record_facts", "review_edits"]);
-  assert.ok(!savedData().includes(SECRET));
+  assert.ok(!(await savedData()).includes(SECRET));
 });
 
 test("schemas fill in defaults for fields the model leaves out", () => {

@@ -21,7 +21,6 @@
 // only; it is never stored or logged. Every stored resource belongs to a `workspace`
 // (the browser's private id).
 
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MasterProfile, Resume, ResumeVersion } from "../lib/tailor/types";
 import { runChat } from "./chat";
@@ -133,7 +132,7 @@ function sse(events: AsyncGenerator<unknown>): Response {
 async function tailor(req: Request) {
   const cfg = llmConfig(req);
   const r = await body(req, TailorRequest);
-  const runId = randomUUID().replace(/-/g, "").slice(0, 12); // one log per run
+  const runId = store.newRunId(); // one log per run
   return sse(
     runTailor(
       cfg,

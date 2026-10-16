@@ -1,10 +1,12 @@
-// Server only. The platform's small data file: saved workflows, their runs, and the
-// profile automations search with. One JSON file — no database to install or pay for.
+// Server only. The platform's small data store: saved workflows, their runs, and the
+// profile automations search with. One JSON document under the key "automations" — a file
+// (<data folder>/automations.json) or, when DATABASE_URL is set, a database row (see
+// @offerloop/storage). No database needed locally.
 //
 // There are no accounts yet, so this holds one person's data. Before a multi-user launch
-// this becomes a real database keyed by user.
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+// this becomes per-user data.
 import path from "node:path";
+import { openStorage } from "@offerloop/storage";
 import type { SearchProfile } from "@/lib/jobs";
 import type { SalaryObservation } from "@/lib/salary";
 import type { Workflow, WorkflowRun } from "@/lib/workflow-defs";
@@ -29,7 +31,8 @@ const MAX_OBSERVATIONS = 4000;
 const OBSERVATION_DAYS = 120;
 
 const dir = () => process.env.OFFERLOOP_DATA_DIR || process.env.JOBSWITCH_DATA_DIR || path.join(process.cwd(), ".data");
-const file = () => path.join(dir(), "automations.json");
+const storage = () => openStorage({ fileRoot: dir(), namespace: "platform" });
+const KEY = "automations";
 
 // Kept on globalThis: Next.js can load this module more than once in one process
 // (route handlers and the scheduler are bundled separately), and they must share one queue.
@@ -40,25 +43,19 @@ const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryO
 
 async function load(): Promise<StoreData> {
   try {
-    const data = JSON.parse(await readFile(file(), "utf8")) as Partial<StoreData>;
-    return { ...empty(), ...data };
+    return { ...empty(), ...(await storage().get<Partial<StoreData>>(KEY)) };
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return empty();
-    // A corrupt file must not be silently replaced by an empty one.
-    throw new Error(`Couldn't read ${file()}: ${err instanceof Error ? err.message : err}`);
+    // Damaged data must not be silently replaced by an empty store.
+    throw new Error(`Couldn't read the automations data: ${err instanceof Error ? err.message : err}`, { cause: err });
   }
 }
 
 async function save(data: StoreData) {
-  await mkdir(dir(), { recursive: true });
   data.runs = data.runs.slice(0, MAX_RUNS);
   for (const id of Object.keys(data.seenJobs)) data.seenJobs[id] = data.seenJobs[id].slice(-MAX_SEEN);
   const cutoff = new Date(Date.now() - OBSERVATION_DAYS * 86_400_000).toISOString();
   data.salaryObservations = data.salaryObservations.filter((o) => o.seenAt >= cutoff).slice(-MAX_OBSERVATIONS);
-  // Write beside the file, then swap: a crash mid-write leaves the old file intact.
-  const tmp = `${file()}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-  await rename(tmp, file());
+  await storage().set(KEY, data);
 }
 
 /** Read the current data. */

@@ -18,8 +18,10 @@ Studio's engine (`/api/redline/*`, served in-process by `modules/resume-studio/s
 
 ### Deploy
 
-**Render (recommended):** [`render.yaml`](render.yaml) sets up everything — step-by-step in
-[`deploy/RENDER.md`](deploy/RENDER.md). Starter instance + 1 GB disk, about $7/month.
+**Free (recommended): Render + Supabase + cron-job.org** — step-by-step in
+[`deploy/RENDER.md`](deploy/RENDER.md). [`render.yaml`](render.yaml) sets up the Render
+service; data lives in a free Supabase Postgres (`DATABASE_URL`); a free pinger keeps the
+app awake and runs automations.
 
 **Your own server** (e.g. Oracle Cloud's free VM): [`deploy/ORACLE.md`](deploy/ORACLE.md) —
 the app plus Caddy for HTTPS (`deploy/docker-compose.yml`).
@@ -33,7 +35,8 @@ docker run -p 3100:3100 -v offerloop-data:/data --env-file apps/platform/.env.lo
 ```
 
 Saved workflows and Resume Studio workspaces live in `/data` — mount a volume there or
-they're lost on redeploy. The host must allow long-running responses (tailoring streams
+they're lost on redeploy — or set `DATABASE_URL` to any Postgres (Supabase, Neon…) and no
+disk is needed (`shared/storage`: one table, `offerloop_kv`, created on first start). The host must allow long-running responses (tailoring streams
 its progress), so serverless platforms like Vercel don't fit yet. Run one copy only.
 
 **Before going public**, set `APP_PASSWORD`: every page and API then needs that password
@@ -59,7 +62,8 @@ Upload a resume, paste a job description, review every edit as a redline, downlo
 - **Files** (`extract.ts`) — PDFs go to the model as-is where it can read them; Groq gets
   column-aware extracted text (two-column resumes are read column by column).
 - **Storage** (`store.ts`) — JSON files under `<OFFERLOOP_DATA_DIR>/redline`
-  (`apps/platform/.data/redline` locally), one folder per browser workspace.
+  (`apps/platform/.data/redline` locally), one folder per browser workspace; or the
+  database when `DATABASE_URL` is set.
 
 `pnpm --filter @offerloop/resume-studio test` runs the engine's tests with the model scripted,
 so no key is needed.
@@ -111,7 +115,7 @@ the ones that respond.
 Workflows run on the server, so they work with the browser closed.
 
 - **Storage** — `apps/platform/.data/automations.json` (override with `OFFERLOOP_DATA_DIR`;
-  `/data` in Docker): workflows, the last 100 runs, the profile to search with, and
+  `/data` in Docker), or the database when `DATABASE_URL` is set: workflows, the last 100 runs, the profile to search with, and
   which jobs each workflow has already reported. One file, no database. Single-user until
   accounts exist.
 - **Scheduler** — `src/instrumentation.ts` starts `lib/server/automations/scheduler.ts` when
@@ -162,6 +166,8 @@ offerloop/
 │   └── platform/          Next.js app: landing, dashboard, tools, all APIs (:3100)
 ├── modules/
 │   └── resume-studio/     Resume Studio: <ResumeStudio apiUrl embedded /> + its engine (./server)
+├── shared/
+│   └── storage/           Saved data: JSON files, or Postgres when DATABASE_URL is set
 ├── services/
 │   └── job-agent/         Job application & discovery agent (runs locally, not deployed)
 └── Dockerfile             Single-container deployment image
@@ -173,6 +179,6 @@ offerloop/
 |---|---|
 | `pnpm dev` | The platform in development (:3100) |
 | `pnpm build` / `pnpm start` | Production build / server |
-| `pnpm test` | Platform and Resume Studio tests |
+| `pnpm test` | Platform, Resume Studio and storage tests (`TEST_DATABASE_URL` = a throwaway Postgres also runs the database tests) |
 | `pnpm typecheck` | TypeScript checks in every package |
 | `pnpm dev:job-agent` | The Job Apply Agent |

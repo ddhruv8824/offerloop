@@ -8,6 +8,6 @@
     "build": "pnpm --filter @offerloop/platform build",
     "start": "pnpm --filter @offerloop/platform start",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm --filter @offerloop/platform --filter @offerloop/resume-studio test"
+    "test": "pnpm --filter @offerloop/platform --filter @offerloop/resume-studio --filter @offerloop/storage test"
   }
 }

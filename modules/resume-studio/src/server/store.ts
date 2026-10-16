@@ -1,21 +1,23 @@
-// File-backed storage, one folder per workspace (the browser's private id):
+// Resume Studio's saved data, one group of keys per workspace (the browser's private id):
 //
-//   <data>/workspaces/<workspace>/current_resume.json
-//   <data>/workspaces/<workspace>/master_profile.json
-//   <data>/workspaces/<workspace>/versions/<version id>.json
-//   <data>/workspaces/<workspace>/chat.json          chat memory + its step log
-//   <data>/workspaces/<workspace>/runs/<run id>.json  step log of one tailoring run
-//   <data>/jd_cache/<sha256 of JD>.json              shared JD-analysis cache
+//   workspaces/<workspace>/current_resume
+//   workspaces/<workspace>/master_profile
+//   workspaces/<workspace>/versions/<version id>
+//   workspaces/<workspace>/chat               chat memory + its step log
+//   workspaces/<workspace>/runs/<run id>      step log of one tailoring run
+//   jd_cache/<sha256 of JD>                   shared JD-analysis cache
 //
-// <data> is REDLINE_DATA_DIR, else <OFFERLOOP_DATA_DIR>/redline, else ./.data/redline.
+// Kept by @offerloop/storage: in the database when DATABASE_URL is set (namespace
+// "redline"), otherwise as JSON files under REDLINE_DATA_DIR, else
+// <OFFERLOOP_DATA_DIR>/redline, else ./.data/redline.
 
-import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { openStorage } from "@offerloop/storage";
 import type { MasterProfile, Resume, ResumeVersion, VersionMeta, Workspace } from "../lib/tailor/types";
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const MAX_RUN_LOGS = 50;
+const MAX_RUN_LOGS = 30;
 
 export function dataDir(): string {
   const env = process.env;
@@ -23,29 +25,27 @@ export function dataDir(): string {
   return path.join(env.OFFERLOOP_DATA_DIR || path.join(process.cwd(), ".data"), "redline");
 }
 
+const storage = () => openStorage({ fileRoot: dataDir(), namespace: "redline" });
+
 export const isValidId = (value: string) => ID_RE.test(value ?? "");
 
-function workspaceDir(workspace: string): string {
+function workspaceKey(workspace: string): string {
   const ws = (workspace ?? "").trim();
   if (!ID_RE.test(ws)) throw new RangeError("workspace must be 1–64 letters, digits, '-' or '_'");
-  return path.join(dataDir(), "workspaces", ws);
+  return `workspaces/${ws}`;
 }
 
-async function read<T>(file: string): Promise<T | null> {
+/** Missing or unreadable data counts as none. */
+async function read<T>(key: string): Promise<T | null> {
   try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
-  } catch {
-    return null; // missing or not valid JSON
+    return await storage().get<T>(key);
+  } catch (err) {
+    if (err instanceof SyntaxError) return null; // a damaged file
+    throw err;
   }
 }
 
-async function write(file: string, data: unknown): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  // Write beside the file, then swap: a crash mid-write leaves the old file intact.
-  const tmp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-  await rename(tmp, file);
-}
+const write = (key: string, data: unknown) => storage().set(key, data);
 
 // ── JD analysis cache ─────────────────────────────────────────────────────────
 
@@ -58,35 +58,36 @@ export function jdHash(jdText: string): string {
 
 export async function getCachedJdAnalysis<T>(key: string): Promise<T | null> {
   if (jdMemoryCache.has(key)) return jdMemoryCache.get(key) as T;
-  const data = await read<T>(path.join(dataDir(), "jd_cache", `${key}.json`));
+  const data = await read<T>(`jd_cache/${key}`);
   if (data !== null) jdMemoryCache.set(key, data);
   return data;
 }
 
 export async function cacheJdAnalysis(key: string, analysis: unknown): Promise<void> {
   jdMemoryCache.set(key, analysis);
-  await write(path.join(dataDir(), "jd_cache", `${key}.json`), analysis);
+  await write(`jd_cache/${key}`, analysis);
 }
 
 // ── workspace ─────────────────────────────────────────────────────────────────
 
 export async function saveResumeAndProfile(workspace: string, resume: Resume, master: MasterProfile): Promise<void> {
-  const dir = workspaceDir(workspace);
-  await write(path.join(dir, "current_resume.json"), resume);
-  await write(path.join(dir, "master_profile.json"), master);
+  const ws = workspaceKey(workspace);
+  await write(`${ws}/current_resume`, resume);
+  await write(`${ws}/master_profile`, master);
 }
 
 export async function saveMasterProfile(workspace: string, master: MasterProfile): Promise<void> {
-  await write(path.join(workspaceDir(workspace), "master_profile.json"), master);
+  await write(`${workspaceKey(workspace)}/master_profile`, master);
 }
 
 export async function loadWorkspace(workspace: string): Promise<Workspace> {
-  const dir = workspaceDir(workspace);
-  return {
-    current_resume: await read<Resume>(path.join(dir, "current_resume.json")),
-    master_profile: await read<MasterProfile>(path.join(dir, "master_profile.json")),
-    versions: await listVersions(workspace),
-  };
+  const ws = workspaceKey(workspace);
+  const [current_resume, master_profile, versions] = await Promise.all([
+    read<Resume>(`${ws}/current_resume`),
+    read<MasterProfile>(`${ws}/master_profile`),
+    listVersions(workspace),
+  ]);
+  return { current_resume, master_profile, versions };
 }
 
 const versionMeta = (v: Partial<ResumeVersion>): VersionMeta =>
@@ -94,19 +95,11 @@ const versionMeta = (v: Partial<ResumeVersion>): VersionMeta =>
     (["id", "label", "company", "role_title", "created_at", "updated_at"] as const).map((k) => [k, v[k] ?? null]),
   ) as unknown as VersionMeta;
 
-async function jsonFiles(dir: string): Promise<string[]> {
-  try {
-    return (await readdir(dir)).filter((f) => f.endsWith(".json")).map((f) => path.join(dir, f));
-  } catch {
-    return [];
-  }
-}
-
 export async function listVersions(workspace: string): Promise<VersionMeta[]> {
-  const files = await jsonFiles(path.join(workspaceDir(workspace), "versions"));
-  const versions = (await Promise.all(files.map((f) => read<Partial<ResumeVersion>>(f)))).filter(
-    (v): v is Partial<ResumeVersion> => !!v && typeof v === "object" && !Array.isArray(v),
-  );
+  const entries = await storage().list<Partial<ResumeVersion>>(`${workspaceKey(workspace)}/versions/`);
+  const versions = entries
+    .map((e) => e.value)
+    .filter((v): v is Partial<ResumeVersion> => !!v && typeof v === "object" && !Array.isArray(v));
   const sortKey = (v: Partial<ResumeVersion>) => v.updated_at || v.created_at || "";
   versions.sort((a, b) => (sortKey(a) < sortKey(b) ? 1 : sortKey(a) > sortKey(b) ? -1 : 0));
   return versions.map(versionMeta);
@@ -115,13 +108,13 @@ export async function listVersions(workspace: string): Promise<VersionMeta[]> {
 export async function saveVersion(workspace: string, version: Partial<ResumeVersion>): Promise<VersionMeta> {
   const id = String(version.id ?? "");
   if (!ID_RE.test(id)) throw new RangeError("invalid version id");
-  await write(path.join(workspaceDir(workspace), "versions", `${id}.json`), version);
+  await write(`${workspaceKey(workspace)}/versions/${id}`, version);
   return versionMeta(version);
 }
 
 export async function getVersion(workspace: string, versionId: string): Promise<ResumeVersion | null> {
   if (!ID_RE.test(versionId)) return null;
-  return read<ResumeVersion>(path.join(workspaceDir(workspace), "versions", `${versionId}.json`));
+  return read<ResumeVersion>(`${workspaceKey(workspace)}/versions/${versionId}`);
 }
 
 // ── step logs and chat memory ─────────────────────────────────────────────────
@@ -147,35 +140,36 @@ interface ChatFile {
 const MAX_CHAT_MESSAGES = 200;
 const MAX_CHAT_LOG = 300;
 
-const chatFile = (workspace: string) => path.join(workspaceDir(workspace), "chat.json");
+const chatKey = (workspace: string) => `${workspaceKey(workspace)}/chat`;
 
 export async function loadChat(workspace: string): Promise<ChatFile> {
-  const data = await read<Partial<ChatFile>>(chatFile(workspace));
+  const data = await read<Partial<ChatFile>>(chatKey(workspace));
   return { messages: data?.messages ?? [], log: data?.log ?? [] };
 }
 
 export async function appendChatTurn(workspace: string, messages: ChatMessage[], steps: LogStep[]): Promise<void> {
   const chat = await loadChat(workspace);
-  await write(chatFile(workspace), {
+  await write(chatKey(workspace), {
     messages: [...chat.messages, ...messages].slice(-MAX_CHAT_MESSAGES),
     log: [...chat.log, ...steps].slice(-MAX_CHAT_LOG),
   });
 }
 
+/** A new run id: the time in hex first, so ids sort oldest → newest. */
+export function newRunId(): string {
+  return Date.now().toString(16).padStart(12, "0") + Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+}
+
 export async function saveRunLog(workspace: string, runId: string, steps: LogStep[]): Promise<void> {
-  const dir = path.join(workspaceDir(workspace), "runs");
-  await write(path.join(dir, `${runId}.json`), { steps, created_at: new Date().toISOString() });
-  // Keep the newest logs only. Run ids aren't ordered, so go by each log's own timestamp.
-  const files = await jsonFiles(dir);
-  if (files.length <= MAX_RUN_LOGS) return;
-  const dated = await Promise.all(
-    files.map(async (f) => ({ f, at: (await read<{ created_at?: string }>(f))?.created_at ?? "" })),
-  );
-  dated.sort((a, b) => (a.at < b.at ? 1 : -1));
-  await Promise.all(dated.slice(MAX_RUN_LOGS).map(({ f }) => unlink(f).catch(() => undefined)));
+  const prefix = `${workspaceKey(workspace)}/runs/`;
+  const s = storage();
+  await s.set(prefix + runId, { steps, created_at: new Date().toISOString() });
+  // Keep the newest logs only. Ids start with their time, so sorting the keys is enough.
+  const keys = (await s.keys(prefix)).sort();
+  await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_RUN_LOGS)).map((k) => s.delete(k)));
 }
 
 export async function loadRunLog(workspace: string, runId: string): Promise<LogStep[] | null> {
   if (!ID_RE.test(runId)) return null;
-  return (await read<{ steps: LogStep[] }>(path.join(workspaceDir(workspace), "runs", `${runId}.json`)))?.steps ?? null;
+  return (await read<{ steps: LogStep[] }>(`${workspaceKey(workspace)}/runs/${runId}`))?.steps ?? null;
 }
