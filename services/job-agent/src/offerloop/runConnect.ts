@@ -4,6 +4,8 @@
 //   npm run connect              one pass through what's approved, then exit
 //   npm run connect -- --watch   keep checking every 10 minutes while this window is open
 //   npm run connect -- --dry-run find each job's Apply button without clicking it
+//   npm run connect -- --scheduled  for Task Scheduler: never waits for a manual login
+//                                   (see scripts/run-connect.ps1)
 //
 // Needs in .env: OFFERLOOP_URL (your site, e.g. https://offerloop-xxxx.onrender.com) and
 // OFFERLOOP_AGENT_KEY (Offerloop → Automations → Hirist agent → Connect).
@@ -13,7 +15,7 @@ import { loadEnvFile } from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { applyToHiristJob } from "../hirist/applyToJob.js";
 import { createHiristClient, pageTransport } from "../hirist/api.js";
-import { ensureHiristAuthenticated, isHiristAuthenticated } from "../hirist/auth.js";
+import { ensureHiristAuthenticated, isHiristAuthenticated, preflightHiristAuthentication } from "../hirist/auth.js";
 import { connectToChrome } from "../hirist/browser.js";
 import { mapJobDetail } from "../hirist/getJobDetails.js";
 import type { Page } from "playwright";
@@ -29,6 +31,8 @@ try {
 const args = new Set(process.argv.slice(2));
 const watch = args.has("--watch");
 const dryRun = args.has("--dry-run");
+// Nobody is watching a scheduled run, so it must not sit waiting for a login.
+const scheduled = args.has("--scheduled");
 const WATCH_EVERY_MS = 10 * 60_000;
 
 const url = process.env.OFFERLOOP_URL?.trim();
@@ -46,7 +50,12 @@ let page: Page | undefined;
  *  (opening Hirist, waiting for you to log in by hand) only happens when it fails. */
 const ready = async () => {
   if (!page || page.isClosed()) page = (await connectToChrome()).page;
-  if (!(await isHiristAuthenticated(page))) await ensureHiristAuthenticated(page);
+  if (await isHiristAuthenticated(page)) return page;
+  if (!scheduled) {
+    await ensureHiristAuthenticated(page); // waits for you to log in by hand
+  } else if (!(await preflightHiristAuthentication(page))) {
+    throw new Error("Not logged in to Hirist. Open the agent's Chrome and log in; approved jobs stay queued until the next run.");
+  }
   return page;
 };
 
@@ -80,7 +89,9 @@ async function once() {
   return summary;
 }
 
-console.log(`Offerloop job agent — ${url}${dryRun ? " (dry run: nothing will be submitted)" : ""}`);
+console.log(
+  `Offerloop job agent — ${url}${dryRun ? " (dry run: nothing will be submitted)" : ""}${scheduled ? ` (scheduled run, ${new Date().toLocaleString()})` : ""}`,
+);
 try {
   for (;;) {
     const summary = await once();
