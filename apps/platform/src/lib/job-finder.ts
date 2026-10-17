@@ -9,6 +9,9 @@ import type { CareerProfile } from "./types";
 /** What /api/jobs/search returns. */
 export interface JobSearchResult {
   jobs: ScoredJob[];
+  /** Ruled out by your deal-breakers (older cached results may lack these). */
+  hidden?: ScoredJob[];
+  hiddenCount?: number;
   sources: { name: string; via: string; ok: boolean; scanned: number; matched: number; error?: string }[];
   scanned: number;
   matched: number;

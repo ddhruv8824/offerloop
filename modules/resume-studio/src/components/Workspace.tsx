@@ -408,6 +408,7 @@ export function Workspace({ workspace, embedded = false }: WorkspaceProps) {
               gaps: ev.gaps,
               gap_answers: {},
               thread_id: ev.thread_id,
+              review: ev.review,
             };
             setVersions((vs) => ({ ...vs, [id]: version }));
             versionsRef.current = { ...versionsRef.current, [id]: version };

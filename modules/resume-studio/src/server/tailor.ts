@@ -1,19 +1,22 @@
-// Tailoring a resume to a job description, in four steps:
+// Tailoring a resume to a job description, in five steps:
 //
-//   analyze_jd   AI   What does the job want? (ATS keywords + aliases; cached per JD)
-//   write_edits  AI   Propose edits: bullets, summary, skills, gap questions
-//   review       code Check each edit against the master profile (flag, don't block)
-//   score        code Apply the edits and compute the ATS score before → after
+//   analyze_jd        AI   What does the job want? (ATS keywords + aliases; cached per JD)
+//   write_edits       AI   Propose edits: bullets, summary, skills, gap questions
+//   recruiter_review  AI   A hiring manager's pass: keep, improve or drop each edit, add
+//                          up to 3 for must-haves the profile backs (see review.ts)
+//   check             code Check each edit against the master profile (flag, don't block)
+//   score             code Apply the edits and compute the ATS score before → after
 //
 // Progress streams to the browser as events (status → jd_analysis → result), and
 // every step's output is saved as the run's log (GET /tailor/threads/{id}/history).
 
 import { atsScore } from "../lib/tailor/ats";
 import { applyChanges } from "../lib/tailor/patch";
-import type { Gap, JdAnalysis, MasterProfile, Resume, TailorEvent } from "../lib/tailor/types";
+import type { Gap, JdAnalysis, MasterProfile, Resume, TailorEvent, TailorReviewSummary } from "../lib/tailor/types";
 import { ask as askModel, type LlmConfig, type RunOptions } from "./models";
 import * as prompts from "./prompts";
-import { JDAnalysis, TailorPlan, toChanges } from "./schemas";
+import { applyReview, draftForReview } from "./review";
+import { JDAnalysis, TailorPlan, TailorReview, toChanges } from "./schemas";
 import * as store from "./store";
 import { supportedSkill, validateChanges } from "./validation";
 
@@ -70,13 +73,31 @@ export async function* runTailor(
     const plan = await ask(llm, TailorPlan, prompts.tailoring(jd, resume, master), { temperature: 0.2, signal });
     record("write_edits", { plan });
 
-    // 3. review
-    yield { type: "status", stage: "validating", message: "Checking changes against your profile…" };
-    const [changes, rejected] = validateChanges(toChanges(plan), resume, master, jd);
-    const gaps = usefulGaps(plan, master);
-    record("review", { changes, rejected, gaps });
+    // 3. recruiter_review — worth a second call only when there's a draft to review. If it
+    // fails (rate limit, timeout), the draft is used as is: the review improves, never blocks.
+    let edits = toChanges(plan);
+    let review: TailorReviewSummary | undefined;
+    if (edits.length) {
+      yield { type: "status", stage: "reviewing", message: "Reviewing the edits like a recruiter…" };
+      try {
+        const verdict = await ask(llm, TailorReview, prompts.review(jd, resume, master, draftForReview(edits)), { temperature: 0.1, signal });
+        ({ edits, summary: review } = applyReview(edits, verdict));
+        record("recruiter_review", { verdict, review });
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        const reason = err instanceof Error ? err.message : String(err);
+        review = { notes: [], kept: edits.length, improved: 0, dropped: [], added: 0, skipped: reason };
+        record("recruiter_review", { skipped: reason });
+      }
+    }
 
-    // 4. score
+    // 4. check — the honesty rules, on the reviewed edits too
+    yield { type: "status", stage: "validating", message: "Checking changes against your profile…" };
+    const [changes, rejected] = validateChanges(edits, resume, master, jd);
+    const gaps = usefulGaps(plan, master);
+    record("check", { changes, rejected, gaps });
+
+    // 5. score
     const tailored = applyChanges(resume, changes);
     const ats = { before: atsScore(resume, jd), after: atsScore(tailored, jd) };
     record("score", { tailored_resume: tailored, ats });
@@ -93,6 +114,7 @@ export async function* runTailor(
       gaps,
       ats,
       tailored_resume: tailored,
+      review,
     };
   } catch (err) {
     if (signal?.aborted) return;

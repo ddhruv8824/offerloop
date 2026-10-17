@@ -39,7 +39,10 @@ const toRunJob = (j: ScoredJob, isNew: boolean): RunJob => ({
   score: j.score,
   source: j.source,
   isNew,
-  flags: j.flags,
+  flags: j.vetoed ? [`Hits a deal-breaker: ${j.vetoed}`, ...j.flags] : j.flags,
+  verdict: j.fit?.verdict,
+  strengths: j.fit?.strengths,
+  gaps: j.fit?.gaps,
   minExperience: j.minExperience,
   maxExperience: j.maxExperience,
   insights: insightsFor(j),
@@ -87,6 +90,7 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
         message:
           `Scanned ${result.scanned.toLocaleString("en-IN")} open roles; ${plural(fits.length, "job")} at ${minScore}%+ match` +
           (run.startedBy === "schedule" ? `, ${fresh} new since the last run.` : `, kept the top ${picked.length} (${fresh} new).`) +
+          (result.hiddenCount ? ` ${plural(result.hiddenCount, "job")} left out for your deal-breakers.` : "") +
           (failed ? ` ${plural(failed, "source")} didn't respond.` : ""),
         apply: (r, data) => {
           r.jobs = picked;

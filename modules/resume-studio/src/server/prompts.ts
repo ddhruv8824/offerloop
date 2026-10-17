@@ -5,7 +5,7 @@
 import type { ModelMessage } from "ai";
 import type { JdAnalysis, MasterProfile, Resume } from "../lib/tailor/types";
 import { PROVIDERS, type Prompt, type ProviderId } from "./models";
-import { CHAT_SYSTEM_PROMPT, TAILOR_SYSTEM_PROMPT } from "./system-prompts";
+import { CHAT_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT, TAILOR_SYSTEM_PROMPT } from "./system-prompts";
 
 const asJson = (data: unknown) => JSON.stringify(data, null, 1);
 
@@ -66,6 +66,25 @@ export function tailoring(jd: JdAnalysis, resume: Resume, master: MasterProfile)
           `## jd_analysis\n${asJson(jd)}` +
           `\n\n## current_resume\n${asJson(withoutContact(resume))}` +
           `\n\n## master_profile\n${asJson(withoutContact(master))}`,
+      },
+    ],
+  };
+}
+
+// ── 3b. Review ────────────────────────────────────────────────────────────────
+
+/** `drafted` = the drafted edits, each with the id the reviewer refers to (d1, d2…). */
+export function review(jd: JdAnalysis, resume: Resume, master: MasterProfile, drafted: unknown[]): Prompt {
+  return {
+    instructions: REVIEW_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content:
+          `## jd_analysis\n${asJson(jd)}` +
+          `\n\n## current_resume\n${asJson(withoutContact(resume))}` +
+          `\n\n## master_profile\n${asJson(withoutContact(master))}` +
+          `\n\n## drafted_edits\n${asJson(drafted)}`,
       },
     ],
   };

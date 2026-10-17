@@ -176,6 +176,14 @@ export function ChangeCard({ index, change, status, baseResume, active, impact, 
       {(change.reason || change.keywords_added.length > 0) && (
         <div className="mt-3 border-t border-am-border pt-3">
           {change.reason && <p className="text-xs italic text-am-muted">{change.reason}</p>}
+          {change.reviewed && (
+            <p className="mt-1.5 text-xs text-am-muted">
+              <span className="font-am-mono text-[10px] uppercase tracking-[0.08em] text-am-success">
+                {change.reviewed === "added" ? "Added by recruiter review" : "Improved by recruiter review"}
+              </span>
+              {change.review_note ? ` · ${change.review_note}` : ""}
+            </p>
+          )}
           {change.keywords_added.length > 0 && change.op !== "update_skills" && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {change.keywords_added.map((k) => (

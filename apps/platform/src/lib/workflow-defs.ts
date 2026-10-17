@@ -10,6 +10,7 @@
 
 // Type-only: erased at runtime, so this file keeps no runtime dependencies.
 import type { JobInsights } from "./company-info";
+import type { FitVerdict } from "./jobs";
 
 export type Artifact = "job" | "company" | "insights" | "resume" | "practice" | "approval";
 
@@ -203,6 +204,10 @@ export interface RunJob {
   /** Not seen by an earlier run of this workflow. */
   isNew: boolean;
   flags: string[];
+  /** "Strong fit", "Good fit"… and the main reasons for and against (runs from before lack these). */
+  verdict?: FitVerdict;
+  strengths?: string[];
+  gaps?: string[];
   /** Years of experience the posting asks for, when it says. */
   minExperience?: number;
   maxExperience?: number;

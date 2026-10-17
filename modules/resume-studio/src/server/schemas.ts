@@ -6,6 +6,7 @@
 //   ResumeExtraction  ← parse an uploaded resume
 //   JDAnalysis        ← understand a job description (ATS keywords + aliases)
 //   TailorPlan        ← edits that tailor the resume to the JD
+//   TailorReview      ← a recruiter's verdict on those edits (keep / improve / drop / add)
 //   ChatDecision      ← what to do with a chat message (edit / answer / fact)
 
 import { z } from "zod";
@@ -130,6 +131,32 @@ export const TailorPlan = z
   })
   .describe("The tailoring edits for one job description, plus questions about gaps.");
 
+// ── 3b. Review ────────────────────────────────────────────────────────────────
+
+const ReviewVerdict = z.object({
+  change: z.string().describe("Id of the drafted edit, e.g. 'd3'."),
+  action: z
+    .enum(["keep", "improve", "drop"])
+    .describe("keep = good as is · improve = better wording in `after` · drop = hurts or adds nothing"),
+  after: text().describe("improve only: the better text (same limits: bullets ≤ 30 words, summary ≤ 70 words)."),
+  reason: z.string().describe("One short sentence, from the recruiter's point of view."),
+});
+
+export const TailorReview = z
+  .object({
+    notes: list().describe(
+      "1–3 short notes: what a recruiter sees in a 10-second scan of the tailored resume, and the biggest weakness left.",
+    ),
+    verdicts: z.array(ReviewVerdict).default([]).describe("One verdict per drafted edit."),
+    additions: z
+      .array(ProposedChange)
+      .default([])
+      .describe(
+        "At most 3 extra edits, only for must-have requirements the master profile clearly backs but the resume still doesn't show.",
+      ),
+  })
+  .describe("A hiring manager's review of the drafted edits.");
+
 // ── 4. Chat ───────────────────────────────────────────────────────────────────
 
 const ProfileFact = z.object({
@@ -159,6 +186,7 @@ export type ResumeExtraction = z.infer<typeof ResumeExtraction>;
 export type JDAnalysis = z.infer<typeof JDAnalysis>;
 export type TailorPlan = z.infer<typeof TailorPlan>;
 export type ChatDecision = z.infer<typeof ChatDecision>;
+export type TailorReview = z.infer<typeof TailorReview>;
 
 /**
  * Flatten a proposal into the change list the review step and the browser use.

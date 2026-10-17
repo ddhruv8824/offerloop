@@ -49,8 +49,33 @@ export interface SearchProfile {
   dealBreakers: string[];
 }
 
+/** One area of the fit breakdown (skills, role, experience, location, pay). */
+export interface FitArea {
+  key: "skills" | "role" | "experience" | "location" | "pay";
+  label: string;
+  /** 0–100; absent when the posting doesn't say (e.g. no pay stated). */
+  score?: number;
+  status: "good" | "ok" | "weak" | "unknown";
+  note: string;
+}
+
+export type FitVerdict = "Strong fit" | "Good fit" | "Worth a try" | "Long shot";
+
+/** Why a job scored what it did, in plain words. */
+export interface JobFit {
+  verdict: FitVerdict;
+  areas: FitArea[];
+  /** Up to 3 reasons it fits. */
+  strengths: string[];
+  /** Up to 3 things that count against it. */
+  gaps: string[];
+}
+
 export interface ScoredJob extends Omit<FoundJob, "description"> {
   score: number;
+  fit: JobFit;
+  /** The deal-breaker this job hits. Such jobs are kept out of results (shown only on request). */
+  vetoed?: string;
   matched: string[];
   missing: string[];
   /** Things to know before applying: experience gap, salary, deal-breakers. */
@@ -272,6 +297,31 @@ function seniorityFloor(title: string): number | undefined {
 
 /* ── Score ────────────────────────────────────────────── */
 
+export function verdictFor(score: number): FitVerdict {
+  return score >= 80 ? "Strong fit" : score >= 65 ? "Good fit" : score >= 50 ? "Worth a try" : "Long shot";
+}
+
+const status = (score: number): FitArea["status"] => (score >= 80 ? "good" : score >= 55 ? "ok" : "weak");
+const listed = (names: string[], max = 3) => names.slice(0, max).join(", ") + (names.length > max ? ` +${names.length - max} more` : "");
+const lpa = (range: SalaryLpa) => (range[0] ? `${range[0]}–${range[1]} LPA` : `up to ${range[1]} LPA`);
+
+/**
+ * A deal-breaker the person wrote themselves ("No crypto", "No startups") that isn't one of
+ * the known ones: it rules a job out when its title or company names it. Only mentioned in
+ * the description, it's a warning — descriptions mention all sorts of things in passing.
+ */
+function customDealBreaker(dealBreaker: string, job: FoundJob): "veto" | "flag" | null {
+  const term = dealBreaker.replace(/^\s*(no|not|avoid|never)\s+/i, "").trim();
+  if (term.length < 3 || DEAL_BREAKER_SIGNALS.some(([mine]) => mine.test(dealBreaker)) || /remote only/i.test(dealBreaker)) return null;
+  // "startups" should also catch "startup": match the term with an optional plural ending.
+  const stem = term.replace(/s$/i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${stem}s?\\b`, "i");
+  // Company names often run words together ("CoinCrypto"), so any part of the name counts.
+  if (re.test(job.title) || job.company.toLowerCase().includes(term.replace(/s$/i, "").toLowerCase())) return "veto";
+  if (re.test(job.description ?? "")) return "flag";
+  return null;
+}
+
 const DEAL_BREAKER_SIGNALS: [RegExp, RegExp, string][] = [
   [/night/i, /night shift|rotational shift|24\s?[x/]\s?7 shift|us shift|uk shift/i, "Mentions night or rotational shifts"],
   [/bond/i, /service bond|bond period|service agreement of|minimum commitment of/i, "Mentions a service bond"],
@@ -339,9 +389,21 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
   const rating = job.companyInfo?.rating;
   const reviews = job.companyInfo?.reviewsCount ?? 0;
   if (rating !== undefined && rating < 3 && reviews >= 10) flags.push(`Employees rate this company ${rating} out of 5 (${reviews} reviews)`);
+
+  // Deal-breakers rule a job out, as the person asked; a guess from the description alone
+  // (pay read from the text, a custom term mentioned in passing) only warns.
+  let vetoed: string | undefined;
   for (const [mine, inJob, label] of DEAL_BREAKER_SIGNALS) {
-    if (profile.dealBreakers.some((d) => mine.test(d)) && inJob.test(text)) flags.push(label);
+    if (profile.dealBreakers.some((d) => mine.test(d)) && inJob.test(text)) vetoed ??= label;
   }
+  if (profile.dealBreakers.some((d) => /remote only/i.test(d)) && place !== "remote" && !job.remote) vetoed ??= "Not a remote role";
+  for (const d of profile.dealBreakers) {
+    const hit = customDealBreaker(d, job);
+    if (hit === "veto") vetoed ??= `Hits your deal-breaker “${d}”`;
+    else if (hit === "flag") flags.push(`Mentions something on your deal-breaker list (“${d}”)`);
+  }
+  const payTooLow = Boolean(profile.minSalaryLpa && job.salaryLpa && job.salaryLpa[1] < profile.minSalaryLpa);
+  if (payTooLow && job.salarySource === "posting") vetoed ??= `Pays at most ${job.salaryLpa![1]} LPA, below your ${profile.minSalaryLpa} LPA minimum`;
 
   const { description, ...rest } = job;
   return {
@@ -349,6 +411,8 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
     skills: names.map((name) => ({ name, required: asked.find((s) => canonicalSkill(s.name) === name)?.required })),
     minExperience: minExp,
     score: Math.max(0, Math.min(100, score)),
+    fit: explainFit({ job, profile, score: Math.max(0, Math.min(100, score)), skillFit, titleOnly, names, matched, missing, required: names.filter((n) => weight(n) === 2), relevance, minExp, gap, over, expFit, place, payTooLow }),
+    vetoed,
     matched,
     missing,
     flags,
@@ -356,6 +420,107 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
     limitedInfo: titleOnly || undefined,
     alsoOn: [],
   };
+}
+
+/** The fit breakdown: one line per area, a verdict, and the main reasons for and against. */
+function explainFit(f: {
+  job: FoundJob;
+  profile: SearchProfile;
+  score: number;
+  skillFit: number;
+  titleOnly: boolean;
+  names: string[];
+  matched: string[];
+  missing: string[];
+  required: string[];
+  relevance: number;
+  minExp: number | undefined;
+  gap: number;
+  over: number;
+  expFit: number;
+  place: "exact" | "remote" | null;
+  payTooLow: boolean;
+}): JobFit {
+  const { job, profile } = f;
+  const areas: FitArea[] = [];
+  const strengths: string[] = [];
+  const gaps: string[] = [];
+
+  // Skills
+  const skills = Math.round(f.skillFit * 100);
+  const missingRequired = f.missing.filter((n) => f.required.includes(n));
+  areas.push({
+    key: "skills",
+    label: "Skills",
+    score: f.titleOnly || !f.names.length ? undefined : skills,
+    status: f.titleOnly || !f.names.length ? "unknown" : status(skills),
+    note: f.titleOnly
+      ? "Only the title to go on"
+      : f.names.length
+        ? `You have ${f.matched.length} of the ${f.names.length} skills it asks for`
+        : "The posting doesn't list skills",
+  });
+  if (f.matched.length >= 2 && skills >= 60) strengths.push(`Has ${f.matched.length} of ${f.names.length} skills it asks for: ${listed(f.matched)}`);
+  if (missingRequired.length) gaps.push(`Missing must-have skill${missingRequired.length > 1 ? "s" : ""}: ${listed(missingRequired)}`);
+  else if (f.missing.length && skills < 60) gaps.push(`Asks for ${listed(f.missing)}, which your profile doesn't list`);
+
+  // Role
+  const role = Math.round(f.relevance * 100);
+  areas.push({
+    key: "role",
+    label: "Role",
+    score: role,
+    status: status(role),
+    note: f.relevance >= 1 ? `A ${profile.targetRole} role` : f.relevance >= 0.7 ? `Close to ${profile.targetRole}` : f.relevance > 0 ? "A different kind of engineering role" : `Not a ${profile.targetRole} role`,
+  });
+  if (f.relevance >= 1) strengths.push(`The kind of role you want (${profile.targetRole})`);
+  else if (f.relevance < 0.7) gaps.push(`Not quite the role you want (${profile.targetRole})`);
+
+  // Experience
+  const exp = Math.round(f.expFit * 100);
+  areas.push({
+    key: "experience",
+    label: "Experience",
+    score: f.minExp === undefined ? undefined : exp,
+    status: f.minExp === undefined ? "unknown" : status(exp),
+    note:
+      f.minExp === undefined
+        ? "Years not stated"
+        : f.gap > 0
+          ? `Asks for ${f.minExp}+ years; you have ${profile.experienceYears}`
+          : f.over > 3
+            ? `Aimed at up to ${job.maxExperience} years; you have ${profile.experienceYears}`
+            : `Asks for ${f.minExp}+ years; you have ${profile.experienceYears}`,
+  });
+  if (f.minExp !== undefined && f.gap <= 0 && f.over <= 3) strengths.push(`Your ${profile.experienceYears} years meet its ${f.minExp}+ ask`);
+  if (f.gap >= 1) gaps.push(`${f.gap} year${f.gap > 1 ? "s" : ""} short of the ${f.minExp}+ it asks for`);
+
+  // Location
+  areas.push({
+    key: "location",
+    label: "Location",
+    score: f.place === "exact" ? 100 : f.place === "remote" ? 85 : 0,
+    status: f.place ? "good" : "weak",
+    note: f.place === "exact" ? job.location : f.place === "remote" ? "Remote, open to India" : "Outside the places on your profile",
+  });
+  if (!f.place) gaps.push("Not in the places on your profile");
+
+  // Pay — not part of the score (most postings don't state it), but the first thing many look at.
+  const range = job.salaryLpa;
+  areas.push({
+    key: "pay",
+    label: "Pay",
+    status: !range ? "unknown" : f.payTooLow ? "weak" : "good",
+    note: !range
+      ? "Not stated"
+      : f.payTooLow
+        ? `${lpa(range)} — below your ${profile.minSalaryLpa} LPA minimum`
+        : `${lpa(range)}${job.salarySource === "description" ? " (read from the description)" : ""}`,
+  });
+  if (range && !f.payTooLow && profile.minSalaryLpa && range[1] >= profile.minSalaryLpa) strengths.push(`Pays ${lpa(range)}, above your ${profile.minSalaryLpa} LPA minimum`);
+  if (f.payTooLow) gaps.push(`Pays ${lpa(range!)}, below your ${profile.minSalaryLpa} LPA minimum`);
+
+  return { verdict: verdictFor(f.score), areas, strengths: strengths.slice(0, 3), gaps: gaps.slice(0, 3) };
 }
 
 /* ── Clean ────────────────────────────────────────────── */

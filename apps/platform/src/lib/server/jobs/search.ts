@@ -19,6 +19,10 @@ export interface SourceReport {
 
 export interface SearchResult {
   jobs: ScoredJob[];
+  /** Jobs ruled out by the person's deal-breakers (best first, at most 20), each with `vetoed` set. */
+  hidden: ScoredJob[];
+  /** How many jobs the deal-breakers ruled out in all. */
+  hiddenCount: number;
   sources: SourceReport[];
   scanned: number;
   matched: number;
@@ -86,11 +90,14 @@ export async function searchJobs(profile: SearchProfile, max = 80): Promise<Sear
   void recordSalaries(scanned).catch((err) => console.warn("[market] couldn't record salaries:", err instanceof Error ? err.message : err));
 
   const unique = dedupe(scored).sort((a, b) => b.score - a.score || (b.postedAt ?? "").localeCompare(a.postedAt ?? ""));
+  const hidden = unique.filter((j) => j.vetoed);
   return {
-    jobs: unique.slice(0, max),
+    jobs: unique.filter((j) => !j.vetoed).slice(0, max),
+    hidden: hidden.slice(0, 20),
+    hiddenCount: hidden.length,
     sources: reports.sort((a, b) => Number(a.ok) - Number(b.ok) || b.matched - a.matched || a.name.localeCompare(b.name)),
     scanned: reports.reduce((n, r) => n + r.scanned, 0),
-    matched: unique.length,
+    matched: unique.length - hidden.length,
     duplicatesMerged: scored.length - unique.length,
     fetchedAt: new Date().toISOString(),
   };

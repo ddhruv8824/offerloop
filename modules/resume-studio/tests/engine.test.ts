@@ -16,7 +16,8 @@ import type { ChatEvent, JdAnalysis, TailorChange, TailorEvent } from "../src/li
 import { layoutRuns, reflowColumns } from "../src/server/extract";
 import { handleRedlineRequest } from "../src/server/handler";
 import { LlmConfigError, resolveConfig, type RunOptions } from "../src/server/models";
-import { ChatDecision, JDAnalysis, TailorPlan } from "../src/server/schemas";
+import { ChatDecision, JDAnalysis, TailorPlan, TailorReview } from "../src/server/schemas";
+import { applyReview } from "../src/server/review";
 import * as store from "../src/server/store";
 import { assignIds, buildMasterProfile } from "../src/server/structure";
 import { runChat } from "../src/server/chat";
@@ -348,14 +349,28 @@ test("tailoring runs every step and logs them", async () => {
         changes: [{ op: "rewrite_bullet", item_id: "exp1", bullet_id: "exp1_b1", after: "Built APIs in Python on AWS", reason: "r", keywords_added: ["AWS"] }],
         gaps: [{ skill: "Kubernetes", question: "Used Kubernetes?" }, { skill: "Python", question: "dup" }],
       }]],
+      // d1 = the bullet rewrite, d2 = the summary
+      [TailorReview, [{
+        notes: ["Reads as a Python backend developer; Kubernetes is the gap."],
+        verdicts: [
+          { change: "d1", action: "improve", after: "Built Python APIs deployed on AWS", reason: "Leads with the stack the JD asks for." },
+          { change: "d2", action: "keep", reason: "fine" },
+        ],
+        additions: [],
+      }]],
     ]),
   );
   const input = { workspace: "ws1", runId: "abc123def456", jdText: "JD ".repeat(60), resume: PIPE_RESUME, master: PIPE_MASTER };
   const events = await collect(runTailor(LLM, input, { ask }));
 
-  assert.deepEqual(events.map((e) => e.type), ["status", "jd_analysis", "status", "status", "result"]);
+  assert.deepEqual(events.map((e) => e.type), ["status", "jd_analysis", "status", "status", "status", "result"]);
   const result = events.at(-1) as Extract<TailorEvent, { type: "result" }>;
-  assert.deepEqual(calls, [JDAnalysis, TailorPlan]);
+  assert.deepEqual(calls, [JDAnalysis, TailorPlan, TailorReview]);
+  const bullet = result.changes.find((c) => c.op === "rewrite_bullet")!;
+  assert.equal(bullet.after, "Built Python APIs deployed on AWS");
+  assert.equal(bullet.reviewed, "improved");
+  assert.equal(result.review?.improved, 1);
+  assert.deepEqual(result.review?.notes, ["Reads as a Python backend developer; Kubernetes is the gap."]);
   assert.equal(result.thread_id, "ws1:tailor:abc123def456");
   assert.deepEqual(new Set(result.changes.map((c) => c.op)), new Set(["rewrite_bullet", "rewrite_summary"]));
   assert.deepEqual(result.skills, ["Python"]); // the plan had no skills list, so skills are unchanged
@@ -364,7 +379,7 @@ test("tailoring runs every step and logs them", async () => {
 
   // every step was logged, and the run log endpoint reads them back in order
   const body = await (await call("GET", "/api/v1/tailor/threads/ws1:tailor:abc123def456/history")).json();
-  assert.deepEqual(body.steps.map((s: { node: string }) => s.node), ["input", "analyze_jd", "write_edits", "review", "score"]);
+  assert.deepEqual(body.steps.map((s: { node: string }) => s.node), ["input", "analyze_jd", "write_edits", "recruiter_review", "check", "score"]);
   assert.deepEqual(body.steps.at(-1).state.ats, result.ats);
   assert.equal((await call("GET", "/api/v1/tailor/threads/ws1:tailor:ffffffffffff/history")).status, 404);
   assert.equal((await call("GET", "/api/v1/tailor/threads/..%2F..%2Fetc/history")).status, 400);
@@ -382,6 +397,55 @@ test("the JD analysis is cached per job description", async () => {
   }
   assert.deepEqual(calls, [JDAnalysis, TailorPlan, TailorPlan]); // the second run skipped the analysis
   assert.equal((events[1] as Extract<TailorEvent, { type: "jd_analysis" }>).cached, true);
+});
+
+test("a failed recruiter review falls back to the draft", async () => {
+  const draft = { changes: [{ op: "rewrite_bullet", item_id: "exp1", bullet_id: "exp1_b1", after: "Built APIs in Python on AWS", reason: "r" }] };
+  const ask = (async (_cfg, schema) => {
+    if (schema === JDAnalysis) return JDAnalysis.parse(PIPE_JD);
+    if (schema === TailorPlan) return TailorPlan.parse(draft);
+    throw new Error("Rate limited — try again in a minute.");
+  }) as NonNullable<RunOptions["ask"]>;
+  const events = await collect(runTailor(LLM, { workspace: "ws1", runId: "feedface01", jdText: "Review fails ".repeat(20), resume: PIPE_RESUME, master: PIPE_MASTER }, { ask }));
+  const result = events.at(-1) as Extract<TailorEvent, { type: "result" }>;
+  assert.equal(result.type, "result");
+  assert.equal(result.changes[0]!.after, "Built APIs in Python on AWS");
+  assert.equal(result.review?.skipped, "Rate limited — try again in a minute.");
+});
+
+test("the recruiter review keeps, improves, drops and adds edits", () => {
+  const drafted = [
+    { op: "rewrite_bullet", item_id: "exp1", bullet_id: "exp1_b1", after: "Did Python things", reason: "r" },
+    { op: "remove_bullet", item_id: "exp1", bullet_id: "exp1_b2", reason: "r" },
+    { op: "reorder_bullets", item_id: "exp1", new_order: ["exp1_b2", "exp1_b1"], reason: "r" },
+    { op: "update_skills", skills_after: ["Python"], reason: "r" },
+  ];
+  const { edits, summary } = applyReview(
+    drafted,
+    TailorReview.parse({
+      notes: ["Strong on Python.", "", "Kubernetes missing.", "a fourth note"],
+      verdicts: [
+        { change: "d1", action: "improve", after: "Built REST APIs in Python", reason: "More specific." },
+        { change: "d2", action: "drop", reason: "Docs show communication; keep it." },
+        { change: "d3", action: "improve", after: "ignored for reorders", reason: "x" },
+        // d4: no verdict → kept
+      ],
+      additions: [
+        { op: "add_bullet", item_id: "exp1", after: "Deployed services on AWS", reason: "AWS is a must-have the profile backs." },
+        { op: "remove_bullet", item_id: "exp1", bullet_id: "exp1_b1", reason: "not allowed as an addition" },
+        { op: "add_bullet", item_id: "exp1", after: "", reason: "empty" },
+      ],
+    }),
+  );
+  assert.deepEqual(edits.map((e) => e.op), ["rewrite_bullet", "reorder_bullets", "update_skills", "add_bullet"]);
+  assert.equal(edits[0]!.after, "Built REST APIs in Python");
+  assert.equal(edits[0]!.reviewed, "improved");
+  assert.equal(edits[3]!.reviewed, "added");
+  assert.deepEqual(summary.notes, ["Strong on Python.", "Kubernetes missing.", "a fourth note"]);
+  assert.equal(summary.kept, 2);
+  assert.equal(summary.improved, 1);
+  assert.equal(summary.added, 1);
+  assert.deepEqual(summary.dropped.map((d) => d.reason), ["Docs show communication; keep it."]);
 });
 
 test("a failed model call becomes an error event", async () => {

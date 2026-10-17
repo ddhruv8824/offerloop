@@ -6,6 +6,7 @@ import { ProfilePrompt } from "@/components/ProfilePrompt";
 import { Badge, Button, ButtonLink, Card, CompanyAvatar, EmptyState, ScoreRing, SkillChip } from "@/components/ui";
 import { importJobLink, useJobSearch, type JobSearchResult } from "@/lib/job-finder";
 import { JobInsightsLine } from "@/components/JobInsightsLine";
+import { FitDetails, HiddenJobs, VerdictBadge } from "@/components/jobs/FitDetails";
 import { SalaryGuide } from "@/components/SalaryGuide";
 import { jobInsights } from "@/lib/job-insights";
 import type { CareerProfile } from "@/lib/types";
@@ -210,6 +211,7 @@ export function JobFeed() {
               </>
             )}
           </Card>
+          <HiddenJobs jobs={result.hidden ?? []} count={result.hiddenCount ?? 0} />
           <p className="mt-3 text-xs text-muted">
             Showing {Math.min(shown, jobs.length)} of {jobs.length} best matches. Green skills are on your profile; dashed ones aren&apos;t. Apply on the company&apos;s page, or let an
             automation apply on Hirist after you approve.
@@ -314,7 +316,7 @@ function JobRow({ job, profile, tracked, onTrack, isNew }: { job: ScoredJob; pro
               {job.title}
             </a>
             {isNew && <Badge tone="coral">New</Badge>}
-            {job.score < 50 && <Badge tone="warning">Weak fit — consider skipping</Badge>}
+            {job.fit ? <VerdictBadge verdict={job.fit.verdict} /> : job.score < 50 && <Badge tone="warning">Weak fit — consider skipping</Badge>}
           </div>
           <p className="mt-0.5 text-sm text-muted">
             {job.company} · {job.location}
@@ -335,11 +337,17 @@ function JobRow({ job, profile, tracked, onTrack, isNew }: { job: ScoredJob; pro
           )}
           {job.limitedInfo && <p className="mt-2 text-xs text-muted">Scored on the title only — open the posting for the full requirements.</p>}
           {insights && <JobInsightsLine insights={insights} className="mt-3" />}
+          {job.vetoed && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-danger">
+              <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden /> Hits a deal-breaker: {job.vetoed}
+            </p>
+          )}
           {job.flags.map((flag) => (
             <p key={flag} className="mt-2 flex items-start gap-1.5 text-xs text-warning">
               <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden /> {flag}
             </p>
           ))}
+          {job.fit && <FitDetails fit={job.fit} score={job.score} />}
         </div>
       </div>
       <div className="flex items-center gap-3 sm:flex-col sm:items-end">

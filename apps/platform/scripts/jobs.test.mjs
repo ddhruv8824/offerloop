@@ -145,8 +145,43 @@ test("scoring: mandatory skills weigh more, flags fire", () => {
   assert.ok(a.score > b.score, "having the mandatory skill should score higher");
 
   const flagged = scoreJob(job({ salaryLpa: [6, 9], description: "React. Rotational shift including night shift." }), profile);
-  assert.ok(flagged.flags.some((f) => f.includes("below your 12 LPA")));
-  assert.ok(flagged.flags.some((f) => /night/i.test(f)));
+  assert.ok(flagged.flags.some((f) => f.includes("below your 12 LPA")), "pay read from the text only warns");
+  assert.match(flagged.vetoed ?? "", /night/i, "a deal-breaker rules the job out");
+});
+
+test("fit: a breakdown, a verdict and reasons for and against", () => {
+  const good = scoreJob(job({ description: "React, TypeScript and Next.js. 2+ years of experience.", salaryLpa: [14, 20], salarySource: "posting" }), profile);
+  assert.equal(good.fit.verdict, good.score >= 80 ? "Strong fit" : "Good fit");
+  assert.deepEqual(good.fit.areas.map((a) => a.key), ["skills", "role", "experience", "location", "pay"]);
+  assert.equal(good.fit.areas.find((a) => a.key === "pay").status, "good");
+  assert.ok(good.fit.strengths.some((s) => s.startsWith("Has 3 of 3 skills")));
+  assert.ok(good.fit.strengths.length <= 3);
+  assert.equal(good.vetoed, undefined);
+
+  const stretch = scoreJob(job({ title: "Senior Frontend Engineer", description: "", skills: [{ name: "Angular", required: true }, { name: "React" }], minExperience: 5 }), profile);
+  assert.ok(stretch.fit.gaps.some((g) => g.includes("must-have skill: Angular")));
+  assert.ok(stretch.fit.gaps.some((g) => g.includes("3 years short")));
+  assert.equal(stretch.fit.verdict, "Long shot");
+
+  const vague = scoreJob(job({ description: "", skills: [] }), profile);
+  assert.equal(vague.fit.areas.find((a) => a.key === "skills").status, "unknown");
+  assert.equal(vague.fit.areas.find((a) => a.key === "pay").note, "Not stated");
+});
+
+test("deal-breakers rule jobs out", () => {
+  const strict = { ...profile, dealBreakers: ["No service bond", "Remote only", "No crypto"] };
+  assert.match(scoreJob(job({ remote: true, description: "React. 2 year service bond applies." }), strict).vetoed, /bond/);
+  assert.equal(scoreJob(job({ remote: false, location: "Pune" }), strict).vetoed, "Not a remote role");
+  assert.equal(scoreJob(job({ remote: true, location: "Remote, India" }), strict).vetoed, undefined);
+  // A custom one rules out jobs that name it in the title or company; in the description it only warns.
+  assert.match(scoreJob(job({ remote: true, company: "Crypto Labs" }), strict).vetoed, /No crypto/);
+  assert.match(scoreJob(job({ remote: true, company: "CoinCrypto" }), strict).vetoed, /No crypto/);
+  const mention = scoreJob(job({ remote: true, description: "React. Our clients include crypto exchanges." }), strict);
+  assert.equal(mention.vetoed, undefined);
+  assert.ok(mention.flags.some((f) => f.includes("No crypto")));
+  assert.equal(scoreJob(job({ remote: true, description: "React and cryptography." }), strict).flags.length, 0, "whole words only");
+  // Pay the posting itself states, below the minimum, rules it out too.
+  assert.match(scoreJob(job({ salaryLpa: [6, 9], salarySource: "posting" }), profile).vetoed, /below your 12 LPA/);
 });
 
 test("dedupe: same role on Hirist and the company site is one result", () => {

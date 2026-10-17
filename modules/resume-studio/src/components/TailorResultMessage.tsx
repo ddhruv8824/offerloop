@@ -3,7 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 import { getApiUrl } from "../lib/api";
 import { changeImpacts, hasKeywords } from "../lib/tailor/ats";
-import type { ChangeStatus, Gap, MasterProfile, RejectedChange, ResumeVersion, TailorChange } from "../lib/tailor/types";
+import type { ChangeStatus, Gap, MasterProfile, RejectedChange, ResumeVersion, TailorChange, TailorReviewSummary } from "../lib/tailor/types";
 import { AtsPanel, type KeywordTarget } from "./AtsPanel";
 import { ChangeCard } from "./ChangeCard";
 import { AmButton, Chip, MonoLabel, amInput } from "./ui";
@@ -68,6 +68,56 @@ export function SkippedList({ items }: { items: RejectedChange[] }) {
   );
 }
 
+/** What the recruiter review thought, and the drafted edits it threw out. */
+function ReviewNotes({ review }: { review: TailorReviewSummary }) {
+  const [open, setOpen] = useState(false);
+  if (review.skipped || (!review.notes.length && !review.dropped.length)) return null;
+  return (
+    <section className="rounded-am-lg border border-am-border bg-am-surface/50 p-4">
+      <MonoLabel className="mb-2 block">Recruiter review</MonoLabel>
+      {review.notes.length > 0 && (
+        <ul className="space-y-1.5">
+          {review.notes.map((note) => (
+            <li key={note} className="text-[13px] text-am-canvas/90">
+              {note}
+            </li>
+          ))}
+        </ul>
+      )}
+      {review.dropped.length > 0 && (
+        <div className="mt-3">
+          <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 text-left">
+            <span className="text-xs text-am-muted">
+              Left out {review.dropped.length} drafted edit{review.dropped.length === 1 ? "" : "s"}
+            </span>
+            <ChevronDown className={cn("ml-auto h-3.5 w-3.5 text-am-muted transition-transform", open && "rotate-180")} />
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-2">
+              {review.dropped.map((d, i) => (
+                <li key={i} className="text-xs text-am-muted">
+                  {d.after && <span className="block text-am-canvas/80">“{d.after}”</span>}→ {d.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** One line on what the review did: "2 improved, 1 left out, 1 added". */
+function reviewLine(review: TailorReviewSummary) {
+  if (review.skipped) return "Recruiter review skipped (the AI didn't answer) — showing the first draft";
+  const parts = [
+    review.improved && `${review.improved} improved`,
+    review.dropped.length && `${review.dropped.length} left out`,
+    review.added && `${review.added} added`,
+  ].filter(Boolean);
+  return `Reviewed like a recruiter${parts.length ? ` — ${parts.join(", ")}` : " — draft kept as is"}`;
+}
+
 export function TailorResultMessage({
   version,
   masterProfile,
@@ -111,6 +161,7 @@ export function TailorResultMessage({
         </div>
         <ul className="space-y-2">
           <StatusRow>JD analyzed{role ? ` — ${role}` : ""}</StatusRow>
+          {version.review && <StatusRow done={!version.review.skipped}>{reviewLine(version.review)}</StatusRow>}
           <StatusRow>
             {tailorChanges.length} refinement{tailorChanges.length === 1 ? "" : "s"} applied to the preview
           </StatusRow>
@@ -122,6 +173,8 @@ export function TailorResultMessage({
           )}
         </ul>
       </section>
+
+      {version.review && <ReviewNotes review={version.review} />}
 
       {hasKeywords(version.jd_analysis) && (
         <AtsPanel version={version} busy={busy} onAddKeywords={onAddKeywords} />

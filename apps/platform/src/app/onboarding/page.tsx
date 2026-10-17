@@ -269,7 +269,7 @@ export default function Onboarding() {
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-semibold">Anything you won&apos;t accept?</h1>
-                  <p className="mt-1 text-sm text-muted">Jobs that hit a deal-breaker are flagged so you don&apos;t waste an application. You can skip this.</p>
+                  <p className="mt-1 text-sm text-muted">Jobs that hit a deal-breaker are left out of your matches (you can still see them in a list). You can skip this.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[...DEAL_BREAKERS, ...draft.dealBreakers.filter((d) => !DEAL_BREAKERS.includes(d))].map((d) => (

@@ -53,8 +53,9 @@ Upload a resume, paste a job description, review every edit as a redline, downlo
 - **AI** — bring your own key: Gemini, OpenAI, Claude or Groq, through the Vercel AI SDK.
   The key travels per request (`X-LLM-Key`) and is never stored or logged. Optional
   server-side keys go in `apps/platform/.env.local` (see `.env.example`).
-- **Tailoring** (`tailor.ts`) — analyse the JD (cached per JD), propose edits, review them
-  against the master profile (`validation.ts`: flags unverified skills and numbers, never
+- **Tailoring** (`tailor.ts`) — analyse the JD (cached per JD), propose edits, have a second
+  AI pass review them like a recruiter (`review.ts`: keep, improve or drop each edit, add up
+  to 3 for must-haves the profile backs), check them against the master profile (`validation.ts`: flags unverified skills and numbers, never
   edits company/title/dates/education), then score ATS keywords before → after. Every
   step is saved as the run's log ("Run log" in the UI).
 - **Chat** (`chat.ts`) — edit, answer or record a fact the user states; remembers the

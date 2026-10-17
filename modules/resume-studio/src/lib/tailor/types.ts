@@ -123,6 +123,10 @@ export interface TailorChange {
   warnings?: string[];
   /** "chat" for edits made from a chat request; tailoring runs leave it unset. */
   origin?: "tailor" | "chat";
+  /** Set when the recruiter review reworded this edit or added it. */
+  reviewed?: "improved" | "added";
+  /** The reviewer's one-line reason for that. */
+  review_note?: string;
 }
 
 export interface RejectedChange extends Partial<TailorChange> {
@@ -144,6 +148,19 @@ export interface AtsResult {
   groups?: Partial<Record<"must_have_skills" | "nice_to_have_skills" | "keywords", { matched: number; total: number }>>;
 }
 
+/** What the recruiter review did to the drafted edits. */
+export interface TailorReviewSummary {
+  /** What a recruiter takes away at a glance, and the biggest weakness left. */
+  notes: string[];
+  kept: number;
+  improved: number;
+  /** Drafted edits the reviewer threw out, with why. */
+  dropped: { op: string; before?: string; after?: string; reason: string }[];
+  added: number;
+  /** Set when the review couldn't run; the draft was used as is. */
+  skipped?: string;
+}
+
 export interface TailorResult {
   /** This run's id — its step-by-step log is at /tailor/threads/{id}/history. */
   thread_id?: string;
@@ -156,10 +173,11 @@ export interface TailorResult {
   gaps: Gap[];
   ats: { before: AtsResult; after: AtsResult };
   tailored_resume: Resume;
+  review?: TailorReviewSummary;
 }
 
 export type TailorEvent =
-  | { type: "status"; stage: "analyzing" | "tailoring" | "validating"; message: string }
+  | { type: "status"; stage: "analyzing" | "tailoring" | "reviewing" | "validating"; message: string }
   | { type: "jd_analysis"; jd_analysis: JdAnalysis; cached: boolean }
   | { type: "progress"; chars: number }
   | ({ type: "result" } & TailorResult)
@@ -187,6 +205,7 @@ export interface ResumeVersion {
   gap_answers: Record<string, GapAnswer>;
   /** The tailoring run that produced this version (see TailorResult.thread_id). */
   thread_id?: string;
+  review?: TailorReviewSummary;
 }
 
 export type VersionMeta = Pick<ResumeVersion, "id" | "label" | "company" | "role_title" | "created_at" | "updated_at">;

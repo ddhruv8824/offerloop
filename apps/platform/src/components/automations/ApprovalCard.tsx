@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertTriangle, Check, ExternalLink, Hand, Loader2 } from "lucide-react";
 import { Badge, Button, Card, scoreTone } from "@/components/ui";
+import { FitReasons, VerdictBadge } from "@/components/jobs/FitDetails";
 import { JobInsightsLine } from "@/components/JobInsightsLine";
 import { approveRun, cancelRun, type WorkflowRun } from "@/lib/workflows";
 
@@ -64,10 +65,12 @@ export function ApprovalCard({ run }: { run: WorkflowRun }) {
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold [overflow-wrap:anywhere]">{job.title}</span>
                     {job.isNew && <Badge tone="coral">New</Badge>}
+                    <VerdictBadge verdict={job.verdict} />
                   </span>
                   <span className="block text-xs text-muted">
                     {job.company} · {job.location} · via {job.source}
                   </span>
+                  <FitReasons strengths={job.strengths} gaps={job.gaps} className="mt-1" />
                   {job.flags.map((flag) => (
                     <span key={flag} className="mt-1 flex items-start gap-1 text-xs text-warning">
                       <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden /> {flag}
