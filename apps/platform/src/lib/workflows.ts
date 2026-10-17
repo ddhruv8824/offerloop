@@ -145,7 +145,7 @@ function rememberSynced(ids: string[]) {
 
 async function applyAgentResults(queue: ApplyItem[]) {
   const already = syncedHere();
-  const finished = queue.filter((q) => !q.trackerSynced && q.status !== "queued" && q.status !== "in_progress");
+  const finished = queue.filter((q) => !q.trackerSynced && q.status !== "queued" && q.status !== "in_progress" && q.status !== "removed");
   const done = finished.filter((q) => !already.has(q.id));
   if (!finished.length) return;
   for (const item of done) {
@@ -153,7 +153,7 @@ async function applyAgentResults(queue: ApplyItem[]) {
       title: item.title,
       company: item.company,
       url: item.url,
-      status: item.status as Exclude<typeof item.status, "queued" | "in_progress">,
+      status: item.status as Exclude<typeof item.status, "queued" | "in_progress" | "removed">,
       message: item.message,
       workflowName: item.workflowName,
     });
@@ -171,6 +171,12 @@ export async function createAgentKey(): Promise<string> {
   const { key } = await api<{ key: string }>("/api/automations/agent", { method: "POST" });
   await refreshAutomations();
   return key;
+}
+
+/** Take an approved job out of the Hirist queue before the agent applies to it. */
+export async function removeFromApplyQueue(id: string): Promise<void> {
+  await api("/api/automations/apply-queue", { method: "POST", body: JSON.stringify({ action: "remove", id }) });
+  await refreshAutomations();
 }
 
 export async function disconnectAgent(): Promise<void> {

@@ -16,8 +16,10 @@ export type ApplyStatus =
   | "already_applied"
   | "needs_input" // Hirist wants answers / a human step: finish it on Hirist
   | "skipped" // not a Hirist one-click job (e.g. "apply on company site")
-  | "failed";
+  | "failed"
+  | "removed"; // taken out by the user before the agent got to it
 
+/** Results the agent can report. */
 export const FINAL_STATUSES: ApplyStatus[] = ["applied", "already_applied", "needs_input", "skipped", "failed"];
 
 export interface ApplyItem {
@@ -86,8 +88,8 @@ export function enqueue(
       notHirist.push(job);
       continue;
     }
-    // Already waiting or done — don't apply twice. A failed one may be queued again.
-    if (queue.some((q) => q.hiristId === hiristId && q.status !== "failed")) {
+    // Already waiting or done — don't apply twice. A failed or removed one may be queued again.
+    if (queue.some((q) => q.hiristId === hiristId && q.status !== "failed" && q.status !== "removed")) {
       duplicates.push(job);
       continue;
     }
@@ -174,6 +176,21 @@ export function report(queue: ApplyItem[], id: string, status: AgentReport, mess
   }
   item.message = message?.slice(0, 300);
   item.updatedAt = at;
+  return item;
+}
+
+/**
+ * The user takes a job back before the agent applies to it. Only waiting jobs can be
+ * removed — one the agent has taken may already be submitted. Returns the job, or null.
+ */
+export function remove(queue: ApplyItem[], id: string, now = new Date()): ApplyItem | null {
+  const item = queue.find((q) => q.id === id);
+  if (!item || item.status !== "queued") return null;
+  item.status = "removed";
+  item.message = "Removed by you before the agent applied.";
+  item.updatedAt = now.toISOString();
+  // Nothing to put on the Tracker: the job stays wherever it is there.
+  item.trackerSynced = true;
   return item;
 }
 

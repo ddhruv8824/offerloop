@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, ExternalLink, KeyRound, Laptop, Loader2, Unplug } from "lucide-react";
+import { Check, Copy, ExternalLink, KeyRound, Laptop, Loader2, Unplug, X } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
 import { DAILY_APPLY_LIMIT, startedToday } from "@/lib/apply-queue";
-import { createAgentKey, disconnectAgent, type AgentStatus, type ApplyItem } from "@/lib/workflows";
+import { createAgentKey, disconnectAgent, removeFromApplyQueue, type AgentStatus, type ApplyItem } from "@/lib/workflows";
 
 const GUIDE_URL = "https://github.com/ddhruv8824/offerloop/blob/main/services/job-agent/docs/offerloop-agent.md";
 
@@ -16,6 +16,7 @@ const STATUS: Record<ApplyItem["status"], { label: string; tone: "neutral" | "in
   needs_input: { label: "Needs you", tone: "warning" },
   skipped: { label: "Not on Hirist", tone: "neutral" },
   failed: { label: "Failed", tone: "danger" },
+  removed: { label: "Removed", tone: "neutral" },
 };
 
 const ago = (iso: string) => {
@@ -35,8 +36,12 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
 
-  const waiting = queue.filter((q) => q.status === "queued" || q.status === "in_progress").length;
+  const active = queue.filter((q) => q.status === "queued" || q.status === "in_progress");
+  const waiting = active.length;
+  // Every job still waiting (so each can be removed), then the latest results.
+  const shown = [...active, ...queue.filter((q) => !active.includes(q)).slice(0, 8)];
   const needsYou = queue.filter((q) => q.status === "needs_input").length;
   const today = startedToday(queue);
 
@@ -49,6 +54,17 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
       setError(err instanceof Error ? err.message : "That didn't work. Try again.");
     } finally {
       setBusy(false);
+    }
+  };
+  const removeJob = async (item: ApplyItem) => {
+    setRemoving(item.id);
+    setError("");
+    try {
+      await removeFromApplyQueue(item.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't remove it. Try again.");
+    } finally {
+      setRemoving(null);
     }
   };
   const newKey = () =>
@@ -160,9 +176,9 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
           </div>
         )}
 
-        {queue.length > 0 && (
+        {shown.length > 0 && (
           <ul className="divide-y divide-line rounded-md border border-line">
-            {queue.slice(0, 8).map((item) => (
+            {shown.map((item) => (
               <li key={item.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <a href={item.url} target="_blank" rel="noreferrer" className="font-semibold hover:underline">
@@ -173,6 +189,18 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
                 </div>
                 <Badge tone={STATUS[item.status].tone}>{STATUS[item.status].label}</Badge>
                 <span className="w-16 text-right text-xs text-faint">{ago(item.updatedAt)}</span>
+                {item.status === "queued" && (
+                  <button
+                    type="button"
+                    onClick={() => removeJob(item)}
+                    disabled={removing === item.id}
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-muted hover:bg-ink/5 hover:text-danger disabled:opacity-50"
+                    title="Take this job out of the queue — the agent won't apply to it"
+                    aria-label={`Remove ${item.title} from the queue`}
+                  >
+                    {removing === item.id ? <Loader2 className="size-3 animate-spin" aria-hidden /> : <X className="size-3" aria-hidden />} Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>

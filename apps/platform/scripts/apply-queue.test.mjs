@@ -1,7 +1,7 @@
 // Run: node --experimental-strip-types --test scripts/apply-queue.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claim, DAILY_APPLY_LIMIT, enqueue, hiristIdOf, report, startedToday, trimQueue } from "../src/lib/apply-queue.ts";
+import { claim, DAILY_APPLY_LIMIT, enqueue, hiristIdOf, remove, report, startedToday, trimQueue } from "../src/lib/apply-queue.ts";
 
 let n = 0;
 const uid = () => `q${++n}`;
@@ -72,6 +72,18 @@ test("report only accepts results for jobs in progress", () => {
   assert.equal(report(queue, queue[0].id, "applied", "Done", T0).status, "applied");
   assert.equal(report(queue, queue[0].id, "failed", "late duplicate", T0), null);
   assert.equal(report(queue, "nope", "applied", undefined, T0), null);
+});
+
+test("remove: only waiting jobs, never handed to the agent, can be approved again", () => {
+  const queue = [];
+  enqueue(queue, [hiristJob(1), hiristJob(2)], run, { max: 5, now: T0, uid });
+  const [second, first] = queue; // newest first
+  assert.equal(remove(queue, first.id, T0).status, "removed");
+  assert.deepEqual(claim(queue, { now: T0 }).items.map((i) => i.hiristId), ["2"], "the removed job isn't handed out");
+  assert.equal(remove(queue, second.id, T0), null, "too late: the agent already took it");
+  assert.equal(report(queue, first.id, "applied", undefined, T0), null, "the agent can't report on a removed job");
+  assert.equal(startedToday(queue, T0), 1, "removing doesn't use up the day");
+  assert.equal(enqueue(queue, [hiristJob(1)], run, { max: 5, now: T0, uid }).added.length, 1, "approving it again later queues it again");
 });
 
 test("trimQueue keeps active jobs and the latest finished ones", () => {
