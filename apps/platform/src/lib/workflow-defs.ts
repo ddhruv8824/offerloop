@@ -242,22 +242,32 @@ export function newUid() {
   }
 }
 
-export function makeStep(actionId: string): WorkflowStep {
+export function makeStep(actionId: string, overrides: Record<string, number | string> = {}): WorkflowStep {
   const def = ACTION_BY_ID[actionId];
   return {
     uid: newUid(),
     actionId,
-    settings: Object.fromEntries((def.settings ?? []).map((s) => [s.key, s.default])),
+    settings: { ...Object.fromEntries((def.settings ?? []).map((s) => [s.key, s.default])), ...overrides },
   };
 }
 
-export const TEMPLATES: { id: string; name: string; description: string; trigger: Trigger; actions: string[] }[] = [
+export const TEMPLATES: {
+  id: string;
+  name: string;
+  description: string;
+  trigger: Trigger;
+  actions: string[];
+  /** Step settings that differ from each action's defaults, by action id. */
+  settings?: Record<string, Record<string, number | string>>;
+}[] = [
   {
     id: "hirist-apply",
     name: "Apply on Hirist",
     description: "Every morning: find Hirist jobs, check pay & culture, tailor your resume — then apply to the ones you approve.",
     trigger: { kind: "daily", time: "09:00" },
     actions: ["jobs.find", "companies.insights", "resume.tailor", "workflow.approval", "hirist.apply", "tracker.add", "workflow.summary"],
+    // Only Hirist jobs can be applied to by the agent; career-page jobs would just pile up for approval.
+    settings: { "jobs.find": { source: "Hirist only" } },
   },
   {
     id: "daily-hunt",
@@ -288,7 +298,7 @@ export function fromTemplate(templateId: string): Workflow {
     id: newUid(),
     name: t.name,
     trigger: t.trigger,
-    steps: t.actions.map(makeStep),
+    steps: t.actions.map((actionId) => makeStep(actionId, t.settings?.[actionId])),
     enabled: true,
     updatedAt: new Date().toISOString(),
   };
