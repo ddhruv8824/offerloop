@@ -9,7 +9,8 @@
 //
 // Needs in .env: OFFERLOOP_URL (your site, e.g. https://offerloop-xxxx.onrender.com) and
 // OFFERLOOP_AGENT_KEY (Offerloop → Automations → Hirist agent → Connect).
-// Chrome must be running with the agent profile (see docs/offerloop-agent.md).
+// Opens the agent's Chrome (its own profile, minimized) when there's something to apply to
+// and it isn't running yet — see docs/offerloop-agent.md.
 
 import { loadEnvFile } from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -49,7 +50,7 @@ let page: Page | undefined;
 /** Chrome attached and logged in. The quick check doesn't reload anything; a full check
  *  (opening Hirist, waiting for you to log in by hand) only happens when it fails. */
 const ready = async () => {
-  if (!page || page.isClosed()) page = (await connectToChrome()).page;
+  if (!page || page.isClosed()) page = (await connectToChrome({ launch: true })).page;
   if (await isHiristAuthenticated(page)) return page;
   if (!scheduled) {
     await ensureHiristAuthenticated(page); // waits for you to log in by hand
@@ -86,7 +87,20 @@ async function once() {
     const parts = Object.entries(summary.byStatus).map(([status, n]) => `${n} ${status.replace("_", " ")}`);
     console.log(`\nDone: ${parts.join(", ")}. Open Offerloop to see them on your Tracker.`);
   }
+  // Nobody may be watching this window, so Offerloop's Automations page shows when the agent
+  // is stuck (and clears it once applying works again).
+  if (summary.stoppedBecause) await tellOfferloop(summary.stoppedBecause);
+  else if (summary.done && !dryRun) await tellOfferloop(null);
   return summary;
+}
+
+/** Best effort: a failure to report a problem shouldn't hide the problem itself. */
+async function tellOfferloop(problem: string | null) {
+  try {
+    await offerloop.problem(problem);
+  } catch {
+    // Offerloop unreachable or older; the log still has it.
+  }
 }
 
 console.log(
@@ -105,6 +119,8 @@ try {
   const expected = error instanceof OfferloopError || (error instanceof Error && /Chrome|hirist|log ?in|Browser was closed/i.test(error.message));
   if (expected) {
     console.error(`\n${(error as Error).message}`);
+    // Can't report "Offerloop unreachable" to Offerloop; everything else (Chrome, Hirist login) we can.
+    if (!(error instanceof OfferloopError)) await tellOfferloop((error as Error).message.split("\n")[0]!);
     process.exit(1);
   }
   throw error;

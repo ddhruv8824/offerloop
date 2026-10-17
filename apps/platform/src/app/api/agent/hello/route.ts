@@ -17,3 +17,21 @@ export async function GET(req: Request) {
   });
   return Response.json({ ok: true, ...status });
 }
+
+/**
+ * The agent tells Offerloop whether it's stuck: { problem: "Not logged in to Hirist…" }, or
+ * { problem: null } once it applied again. Shown on the Automations page, since a background
+ * agent has nobody watching its window.
+ */
+export async function POST(req: Request) {
+  if (!(await isAgentRequest(req))) return notAgent();
+  const body = (await req.json().catch(() => ({}))) as { problem?: unknown };
+  const problem = typeof body.problem === "string" && body.problem.trim() ? body.problem.trim().slice(0, 300) : null;
+  await updateStore((data) => {
+    if (!data.agent) return;
+    data.agent.lastSeenAt = new Date().toISOString();
+    if (problem) data.agent.problem = { message: problem, at: data.agent.lastSeenAt };
+    else delete data.agent.problem;
+  });
+  return Response.json({ ok: true });
+}

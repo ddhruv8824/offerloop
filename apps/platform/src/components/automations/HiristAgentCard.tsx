@@ -119,6 +119,14 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
       <div className="space-y-4 px-5 py-4 text-sm">
         {error && <p className="text-danger">{error}</p>}
 
+        {agent.connected && agent.problem && (
+          <div className="rounded-md border border-warning/40 bg-warning-wash/50 p-3">
+            <p className="font-semibold">Your agent is stuck and needs you ({ago(agent.problem.at)})</p>
+            <p className="mt-1 text-muted">{agent.problem.message}</p>
+            <p className="mt-1 text-xs text-faint">Approved jobs stay queued. Once it&apos;s fixed, the next check (within 15 minutes) carries on.</p>
+          </div>
+        )}
+
         {key && (
           <div className="rounded-md border border-warning/40 bg-warning-wash/50 p-4">
             <p className="font-semibold">Your agent key — copy it now, it won&apos;t be shown again.</p>

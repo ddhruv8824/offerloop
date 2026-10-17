@@ -23,6 +23,7 @@ function fakeOfferloop(jobs: QueuedJob[], remainingToday = 15) {
       return { jobs: waiting.splice(0, Math.min(want, remainingToday)), remainingToday };
     },
     report: async (id, status, message) => void reports.push({ id, status, message }),
+    problem: async () => {},
   };
   return { client, reports, takes: () => takes };
 }

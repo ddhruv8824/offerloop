@@ -26,7 +26,13 @@ export interface StoreData {
   /** Approved Hirist jobs waiting for (or done by) the job agent on the user's PC. */
   applyQueue: ApplyItem[];
   /** The job agent's key, stored only as a hash. */
-  agent?: { keyHash: string; createdAt: string; lastSeenAt?: string };
+  agent?: {
+    keyHash: string;
+    createdAt: string;
+    lastSeenAt?: string;
+    /** Why the agent couldn't apply on its last try (e.g. logged out of Hirist); cleared once it works again. */
+    problem?: { message: string; at: string };
+  };
 }
 
 const MAX_RUNS = 100;

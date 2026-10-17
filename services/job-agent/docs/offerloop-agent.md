@@ -60,7 +60,7 @@ the old one stops working immediately.
    workflow with the *Apply on Hirist* step) and waits for you.
 2. Approve the jobs you want. Hirist ones are queued for the agent; career-page jobs are
    added to your Tracker to apply on the company's site.
-3. On your PC, with the agent's Chrome open:
+3. On your PC — or skip this and let it [run in the background](#run-it-automatically-in-the-background-recommended):
 
 ```powershell
 cd offerloop\services\job-agent
@@ -78,53 +78,53 @@ Results show up under **Automations → Hirist agent** and on your **Tracker**:
 | Not on Hirist (company-site application) | Card with next step **Apply on the company's site** |
 | Failed (job gone, Apply button missing) | Shown on the Automations page |
 
-### Run it automatically (Windows Task Scheduler)
+### Run it automatically in the background (recommended)
 
 Once `npm run connect` works by hand, let Windows run it for you. In `services\job-agent\scripts`,
-**double-click `install-schedule.cmd`** — or from a terminal:
+**double-click `install-schedule.cmd`** and click **Yes** when Windows asks for permission
+(a task that starts at login needs it, once). From a terminal:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-schedule.ps1
 ```
 
-That creates the task **Offerloop Hirist agent**: every day at **10:00, then every 2 hours
-until 20:00**, so jobs you approve during the day are applied within a couple of hours.
-Different times:
+That creates the task **Offerloop Hirist agent**, and from then on it's hands-off:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-schedule.ps1 -Start 09:30 -EveryHours 3 -Until 21:00
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-schedule.ps1 -EveryHours 0   # once a day
-```
+- It starts **2 minutes after you log in to Windows**, then checks **every 15 minutes** for
+  as long as you're logged in. No window opens — it runs hidden.
+- Nothing approved? The check takes a few seconds and does nothing else.
+- Approved Hirist jobs waiting? It opens the agent's Chrome **minimized** (if it isn't open
+  already), applies to them one by one, and your Tracker updates. Chrome stays open in the
+  taskbar afterwards so your Hirist login stays fresh.
+- So the only thing you do is **approve jobs on Offerloop** (works from your phone too) — they're
+  applied within about 15 minutes whenever your PC is on.
 
-Each run (`scripts\run-connect.ps1`):
+Check less often: `... install-schedule.ps1 -EveryMinutes 30`.
 
-1. opens the agent's Chrome minimized if it isn't open yet (no need to start it yourself);
-2. applies to what's approved, like `npm run connect`, but **never waits for a login** — if
-   Hirist logged you out, it stops, notes it in the log, and the jobs stay queued;
-3. writes everything to `services\job-agent\data\logs\connect-YYYY-MM.log`.
+If it gets stuck — usually because Hirist logged you out — the **Hirist agent** card on
+Offerloop's Automations page says so. Open the agent's Chrome from the taskbar, log in to
+hirist.tech, and the next check carries on; the approved jobs wait meanwhile.
 
 Good to know:
 
 - It runs only while you're **logged in to Windows** (the agent uses a Chrome window on your
-  desktop). A run missed while the PC was asleep or off happens as soon as it's back.
-- Test it right away: `Start-ScheduledTask -TaskName "Offerloop Hirist agent"`, then check the
-  log and Offerloop's Automations page. A dry run by hand:
-  `powershell -ExecutionPolicy Bypass -File scripts\run-connect.ps1 -DryRun`.
-- Change or pause it in **Task Scheduler** (Start menu → Task Scheduler → Task Scheduler
+  desktop). A check missed while the PC was asleep happens as soon as it wakes.
+- Everything is logged to `services\job-agent\data\logs\connect-YYYY-MM.log`.
+- Run a check right now: `Start-ScheduledTask -TaskName "Offerloop Hirist agent"`. A dry run
+  by hand: `powershell -ExecutionPolicy Bypass -File scripts\run-connect.ps1 -DryRun`.
+- Pause or change it in **Task Scheduler** (Start menu → Task Scheduler → Task Scheduler
   Library → Offerloop Hirist agent), or remove it: double-click `uninstall-schedule.cmd`.
-- "Access is denied" while installing? Open PowerShell with **Run as administrator** and run
-  the install command again.
 
 ## When something's off
 
 | Message | Fix |
 | --- | --- |
-| `Could not connect to Chrome on port 9222` | Start the agent's Chrome with the command in step 2. |
+| `Could not connect to Chrome on port 9222` | Start the agent's Chrome with the command in step 2 (the background task opens it by itself). |
 | `Unknown or old agent key` | Make a new key on the Automations page and update `.env`. |
 | `Couldn't reach https://…onrender.com` | The free server may be waking up — run it again in a minute. |
 | Waits for "ACTION NEEDED: log in" | Log in to Hirist in the agent's Chrome; it continues by itself. |
 | `Today's limit of 15 … used up` | The rest wait until tomorrow (a rolling 24 hours). |
-| Log says `Not logged in to Hirist` | Open the agent's Chrome, log in to hirist.tech; the next scheduled run continues. |
+| Automations page: "Your agent is stuck" / log says `Not logged in to Hirist` | Open the agent's Chrome from the taskbar, log in to hirist.tech; the next check (within 15 minutes) continues. |
 | Log says `didn't open port 9222` | A window with the agent profile is open without remote debugging: close it; the next run reopens it properly. |
 
 Developers: the loop is `src/offerloop/connect.ts` (tested with fakes in `checkConnect.ts`,

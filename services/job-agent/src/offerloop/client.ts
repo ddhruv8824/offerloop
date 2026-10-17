@@ -10,6 +10,8 @@ export type OfferloopClient = {
   /** Take up to `want` approved jobs (they're marked in progress until reported). */
   take: (want: number) => Promise<{ jobs: QueuedJob[]; remainingToday: number }>;
   report: (id: string, status: QueueStatus, message?: string) => Promise<void>;
+  /** Tell Offerloop the agent is stuck (shown on the Automations page), or null once it works again. */
+  problem: (message: string | null) => Promise<void>;
 };
 
 export class OfferloopError extends Error {
@@ -40,6 +42,9 @@ export function createOfferloopClient(baseUrl: string, key: string): OfferloopCl
     take: (want) => call("/api/agent/queue", { method: "POST", body: JSON.stringify({ want }) }),
     report: async (id, status, message) => {
       await call("/api/agent/result", { method: "POST", body: JSON.stringify({ id, status, message }) });
+    },
+    problem: async (message) => {
+      await call("/api/agent/hello", { method: "POST", body: JSON.stringify({ problem: message }) });
     },
   };
 }

@@ -22,6 +22,8 @@ export interface AgentStatus {
   connected: boolean;
   createdAt?: string;
   lastSeenAt?: string | null;
+  /** Set when the agent is stuck and needs you (e.g. logged out of Hirist). */
+  problem?: { message: string; at: string } | null;
 }
 
 export interface AutomationsState {

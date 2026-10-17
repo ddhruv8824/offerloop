@@ -1,55 +1,48 @@
 <#
-  Sets up Windows Task Scheduler to run the Offerloop job agent by itself.
+  Sets up Windows Task Scheduler to run the Offerloop job agent by itself, in the background.
 
-  Default: every day at 10:00, then every 2 hours until 20:00 — so jobs you approve during
-  the day are applied within a couple of hours. Only while you're logged in to Windows
-  (the agent uses a Chrome window on your desktop); a run missed while the PC was asleep
-  happens as soon as it wakes. Running it again replaces the old schedule.
+  Default: 2 minutes after you log in to Windows, then every 15 minutes for as long as you're
+  logged in. Each check takes a few seconds when nothing is approved; when something is, the
+  agent opens its own Chrome (minimized) and applies. No window pops up: it runs hidden.
+  A check missed while the PC slept happens when it wakes. Running this again replaces the
+  old schedule.
 
   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-schedule.ps1
-  powershell ... -File scripts\install-schedule.ps1 -Start 09:30 -EveryHours 3 -Until 21:00
-  powershell ... -File scripts\install-schedule.ps1 -EveryHours 0      (once a day only)
+  powershell ... -File scripts\install-schedule.ps1 -EveryMinutes 30
 #>
 param(
-  [string]$Start = "10:00",
-  [int]$EveryHours = 2,
-  [string]$Until = "20:00",
+  [ValidateRange(5, 1440)]
+  [int]$EveryMinutes = 15,
   [string]$TaskName = "Offerloop Hirist agent"
 )
 
 $ErrorActionPreference = "Stop"
 $agentDir = Split-Path -Parent $PSScriptRoot
 $runner = Join-Path $PSScriptRoot "run-connect.ps1"
-$culture = [System.Globalization.CultureInfo]::InvariantCulture
-
-try {
-  $startAt = [datetime]::ParseExact($Start, "HH:mm", $culture)
-  $endAt = [datetime]::ParseExact($Until, "HH:mm", $culture)
-} catch {
-  Write-Host "Use 24-hour times like -Start 10:00 -Until 20:00." -ForegroundColor Red
-  exit 1
-}
+$hidden = Join-Path $PSScriptRoot "run-hidden.vbs"
+$user = "$env:USERDOMAIN\$env:USERNAME"
 
 if (-not (Test-Path (Join-Path $agentDir ".env"))) {
   Write-Host "No .env in $agentDir yet. Add OFFERLOOP_URL and OFFERLOOP_AGENT_KEY first (see docs\offerloop-agent.md)." -ForegroundColor Yellow
 }
 
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$runner`"" `
-  -WorkingDirectory $agentDir
-
-$trigger = New-ScheduledTaskTrigger -Daily -At $startAt
-if ($EveryHours -gt 0) {
-  if ($endAt -le $startAt) {
-    Write-Host "-Until must be later than -Start." -ForegroundColor Red
-    exit 1
-  }
-  # A daily trigger can't repeat on its own; borrow the repetition pattern from a one-time trigger.
-  $repeat = New-ScheduledTaskTrigger -Once -At $startAt `
-    -RepetitionInterval (New-TimeSpan -Hours $EveryHours) `
-    -RepetitionDuration ($endAt - $startAt)
-  $trigger.Repetition = $repeat.Repetition
+# Hidden: wscript runs the .vbs, which starts PowerShell with no window. On a Windows without
+# VBScript, fall back to a headless console (also no window).
+if (Test-Path (Join-Path $env:windir "System32\vbscript.dll")) {
+  $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$hidden`"" -WorkingDirectory $agentDir
+} else {
+  $action = New-ScheduledTaskAction -Execute "conhost.exe" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$runner`"" `
+    -WorkingDirectory $agentDir
 }
+
+# When you log in (after 2 minutes, so Windows and the network settle), then every N minutes
+# with no end. A logon trigger can't repeat on its own; borrow the pattern from a one-time one.
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$trigger.Delay = "PT2M"
+$repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $EveryMinutes)
+$trigger.Repetition = $repeat.Repetition
+$trigger.Repetition.Duration = "" # empty = repeat indefinitely
 
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
@@ -59,11 +52,11 @@ $settings = New-ScheduledTaskSettingsSet `
   -MultipleInstances IgnoreNew
 
 # Runs as you, only while you're logged in — no password is stored.
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 
 try {
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
-    -Description "Applies to the Hirist jobs you approved on Offerloop (services\job-agent). Logs: $agentDir\data\logs" `
+    -Description "Applies to the Hirist jobs you approved on Offerloop (services\job-agent), in the background. Logs: $agentDir\data\logs" `
     -Force | Out-Null
 } catch {
   Write-Host "Couldn't create the task: $($_.Exception.Message)" -ForegroundColor Red
@@ -71,9 +64,11 @@ try {
   exit 1
 }
 
-$when = if ($EveryHours -gt 0) { "every day at $Start, then every $EveryHours h until $Until" } else { "every day at $Start" }
+# Start now too, so there's no need to log out and back in.
+Start-ScheduledTask -TaskName $TaskName
+
 Write-Host ""
-Write-Host "Scheduled '$TaskName': $when." -ForegroundColor Green
-Write-Host "Test it now:   Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "Logs:          $agentDir\data\logs"
-Write-Host "Remove it:     scripts\uninstall-schedule.ps1"
+Write-Host "Done. '$TaskName' runs in the background: when you log in to Windows, then every $EveryMinutes minutes." -ForegroundColor Green
+Write-Host "It just did its first check. Approve Hirist jobs on Offerloop and they're applied within $EveryMinutes minutes."
+Write-Host "Logs:       $agentDir\data\logs"
+Write-Host "Remove it:  scripts\uninstall-schedule.cmd"
