@@ -71,7 +71,9 @@ async function once() {
     },
     { dryRun },
   );
-  if (summary.done) {
+  if (summary.done && dryRun) {
+    console.log(`\nDry run done: checked ${summary.done} job(s), submitted nothing. They're still queued — run \`npm run connect\` to apply.`);
+  } else if (summary.done) {
     const parts = Object.entries(summary.byStatus).map(([status, n]) => `${n} ${status.replace("_", " ")}`);
     console.log(`\nDone: ${parts.join(", ")}. Open Offerloop to see them on your Tracker.`);
   }
