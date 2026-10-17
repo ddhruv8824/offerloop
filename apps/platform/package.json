@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --port 3100",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test scripts/email-classifier.test.mjs scripts/jobs.test.mjs scripts/schedule.test.mjs scripts/company-info.test.mjs scripts/salary.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings --test scripts/email-classifier.test.mjs scripts/jobs.test.mjs scripts/schedule.test.mjs scripts/company-info.test.mjs scripts/salary.test.mjs scripts/skills.test.mjs"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.0",

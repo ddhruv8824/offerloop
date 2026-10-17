@@ -1,34 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, FileUp, Plus, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Check, FileUp, Loader2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { SampleProfileButton } from "@/components/SampleProfileButton";
+import { mergeSkills, readResumeSkills, SkillPicker } from "@/components/SkillPicker";
 import { Button, Card } from "@/components/ui";
 import { useProfile } from "@/lib/profile";
 import type { CareerProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CITIES = ["Bangalore", "Pune", "Hyderabad", "Mumbai", "Delhi NCR", "Chennai", "Remote"];
-const ROLE_SKILLS: Record<string, string[]> = {
-  frontend: ["React", "TypeScript", "Next.js", "Tailwind CSS", "JavaScript", "Redux", "Testing Library"],
-  backend: ["Node.js", "Python", "FastAPI", "PostgreSQL", "Docker", "Redis", "AWS"],
-  full: ["React", "Node.js", "TypeScript", "PostgreSQL", "Docker", "Next.js", "Python"],
-  data: ["Python", "SQL", "Pandas", "Machine Learning", "LangChain", "Spark"],
-};
 const DEAL_BREAKERS = ["No night shifts", "No service bond", "No relocation", "No service companies", "No 6-day weeks", "Remote only"];
 
 const STEPS = ["About you", "Your next role", "Your skills", "Deal-breakers"] as const;
-
-function suggestionsFor(role: string) {
-  const r = role.toLowerCase();
-  if (r.includes("front") || r.includes("ui")) return ROLE_SKILLS.frontend;
-  if (r.includes("back")) return ROLE_SKILLS.backend;
-  if (r.includes("full")) return ROLE_SKILLS.full;
-  if (r.includes("data") || r.includes("ml") || r.includes("ai")) return ROLE_SKILLS.data;
-  return ROLE_SKILLS.full;
-}
 
 function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -64,7 +50,10 @@ export default function Onboarding() {
   const router = useRouter();
   const { profile: existing, update } = useProfile();
   const [step, setStep] = useState(0);
-  const [skillDraft, setSkillDraft] = useState("");
+  // The resume's skills, read when it's chosen (step 1) or from the skills step.
+  const [resumeRead, setResumeRead] = useState<{ fileName: string; count: number } | null>(null);
+  const [readingResume, setReadingResume] = useState(false);
+  const [resumeError, setResumeError] = useState("");
   const [customBreaker, setCustomBreaker] = useState("");
   const [draft, setDraft] = useState<CareerProfile>({
     name: "",
@@ -86,10 +75,20 @@ export default function Onboarding() {
   const toggleIn = (key: "locations" | "skills" | "dealBreakers", value: string) =>
     setDraft((d) => ({ ...d, [key]: d[key].includes(value) ? d[key].filter((v) => v !== value) : [...d[key], value] }));
 
-  const addSkill = () => {
-    const s = skillDraft.trim();
-    if (s && !draft.skills.some((x) => x.toLowerCase() === s.toLowerCase())) set("skills", [...draft.skills, s]);
-    setSkillDraft("");
+  const chooseResume = async (file: File | undefined) => {
+    if (!file) return;
+    set("resumeFileName", file.name);
+    setReadingResume(true);
+    setResumeError("");
+    try {
+      const found = await readResumeSkills(file);
+      setDraft((d) => ({ ...d, skills: mergeSkills(d.skills, found) }));
+      setResumeRead({ fileName: file.name, count: found.length });
+    } catch (err) {
+      setResumeError(err instanceof Error ? err.message : "Couldn't read that resume.");
+    } finally {
+      setReadingResume(false);
+    }
   };
 
   const canContinue = [
@@ -146,10 +145,20 @@ export default function Onboarding() {
                       type="file"
                       accept=".pdf,.docx"
                       className="sr-only"
-                      onChange={(e) => set("resumeFileName", e.target.files?.[0]?.name)}
+                      onChange={(e) => chooseResume(e.target.files?.[0])}
                     />
                   </label>
-                  <p className="mt-2 text-xs text-muted">Resume reading connects to the Redline parser in the next phase — for now, fill the steps by hand.</p>
+                  {readingResume && (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Reading your skills…
+                    </p>
+                  )}
+                  {!readingResume && resumeRead && (
+                    <p className="mt-2 text-xs text-success">
+                      Found {resumeRead.count} skill{resumeRead.count === 1 ? "" : "s"}{" "}— you&apos;ll review them in the skills step.
+                    </p>
+                  )}
+                  {resumeError && <p className="mt-2 text-xs text-danger">{resumeError}</p>}
                 </Field>
                 <Field label="What should we call you?">
                   <input className={inputClass} value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="Your first name" autoFocus />
@@ -219,52 +228,16 @@ export default function Onboarding() {
                   <h1 className="text-2xl font-semibold">What are you good at?</h1>
                   <p className="mt-1 text-sm text-muted">Add at least 3. We match these against every job and only claim skills you list here.</p>
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    className={inputClass}
-                    value={skillDraft}
-                    onChange={(e) => setSkillDraft(e.target.value)}
-                    onKeyDown={(e: KeyboardEvent) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addSkill();
-                      }
-                    }}
-                    placeholder="Type a skill and press Enter"
-                  />
-                  <Button variant="secondary" onClick={addSkill} aria-label="Add skill">
-                    <Plus className="size-4" />
-                  </Button>
-                </div>
-                {draft.skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {draft.skills.map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1 rounded-md bg-ink py-1 pr-1 pl-3 text-sm text-paper">
-                        {s}
-                        <button type="button" onClick={() => toggleIn("skills", s)} className="rounded p-0.5 hover:bg-paper/15" aria-label={`Remove ${s}`}>
-                          <X className="size-3.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs font-semibold text-muted">Common for {draft.targetRole || "your role"}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {suggestionsFor(draft.targetRole)
-                      .filter((s) => !draft.skills.includes(s))
-                      .map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => toggleIn("skills", s)}
-                          className="inline-flex items-center gap-1 rounded-md border border-dashed border-faint px-3 py-1 text-sm text-muted hover:border-ink hover:text-text"
-                        >
-                          <Plus className="size-3.5" aria-hidden /> {s}
-                        </button>
-                      ))}
-                  </div>
-                </div>
+                <SkillPicker
+                  skills={draft.skills}
+                  onChange={(skills) => set("skills", skills)}
+                  targetRole={draft.targetRole}
+                  fromResume={resumeRead}
+                  onResumeRead={(fileName, found) => {
+                    set("resumeFileName", fileName);
+                    setResumeRead({ fileName, count: found.length });
+                  }}
+                />
               </div>
             )}
 
