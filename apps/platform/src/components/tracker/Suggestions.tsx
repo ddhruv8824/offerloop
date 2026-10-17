@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExternalLink, HelpCircle } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { isNoise } from "@/lib/email-classifier";
 import { gmailUrl } from "@/lib/gmail-link";
 import { acceptSuggestion, dismissSuggestion, STATUS_LABEL, type Suggestion, type TrackerCard } from "@/lib/tracker";
 import type { ApplicationStatus } from "@/lib/types";
@@ -17,7 +18,10 @@ const KIND_STATUS: Record<string, ApplicationStatus> = {
 };
 
 /** Emails the tracker wasn't sure about: unclear wording, or no matching card. The user decides. */
-export function Suggestions({ suggestions, cards }: { suggestions: Suggestion[]; cards: TrackerCard[] }) {
+export function Suggestions({ suggestions: all, cards }: { suggestions: Suggestion[]; cards: TrackerCard[] }) {
+  // Alerts and newsletters saved before the stricter email rules are hidden straight away
+  // (the next inbox check removes them for good).
+  const suggestions = all.filter((s) => !isNoise(s.detection.subject, { from: s.detection.from }));
   if (!suggestions.length) return null;
   return (
     <Card className="mb-6 border-warning/40">

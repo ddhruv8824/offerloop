@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Loader2, Mail, Mic, Plus } from "lucide-react";
+import { Bot, FileText, Loader2, Mail, Mic, Plus } from "lucide-react";
 import { AddJobDialog } from "@/components/tracker/AddJobDialog";
 import { CardDetail } from "@/components/tracker/CardDetail";
 import { InboxPanel } from "@/components/tracker/InboxPanel";
@@ -67,22 +67,34 @@ export default function Tracker() {
         </div>
       )}
 
+      {/* Columns with cards get the room; empty ones shrink to a slim strip so all fit. */}
       <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-        <div className="grid min-w-[1260px] grid-cols-7 gap-3">
+        <div className="flex gap-3">
           {STATUS_ORDER.map((status) => {
             const column = cards.filter((c) => c.status === status).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+            const empty = column.length === 0;
             return (
-              <section key={status} aria-label={STATUS_LABEL[status]} className="flex flex-col gap-3">
-                <h2 className="flex items-center gap-2 px-1 text-sm font-semibold">
-                  <span className={cn("size-2 rounded-full", DOT[status])} aria-hidden />
-                  {STATUS_LABEL[status]}
+              <section
+                key={status}
+                aria-label={STATUS_LABEL[status]}
+                className={cn("flex flex-col gap-3", empty ? "w-32 shrink-0" : "min-w-52 flex-1 basis-52")}
+              >
+                <h2 className={cn("flex h-5 items-center gap-2 px-1 font-semibold whitespace-nowrap", empty ? "gap-1.5 text-xs text-muted" : "text-sm")}>
+                  <span className={cn("size-2 shrink-0 rounded-full", DOT[status])} aria-hidden />
+                  <span>{STATUS_LABEL[status]}</span>
                   <span className="font-mono text-xs text-muted">{column.length}</span>
                 </h2>
-                <div className="flex min-h-32 flex-col gap-2.5 rounded-lg bg-ink/[0.03] p-2">
-                  {column.map((card) => (
-                    <TrackerCardView key={card.id} card={card} onOpen={() => setOpenId(card.id)} />
-                  ))}
-                </div>
+                {empty ? (
+                  <div className="grid min-h-24 place-items-center rounded-lg border border-dashed border-line px-2 text-center text-[11px] text-faint">
+                    None yet
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5 rounded-lg bg-ink/[0.03] p-2">
+                    {column.map((card) => (
+                      <TrackerCardView key={card.id} card={card} onOpen={() => setOpenId(card.id)} />
+                    ))}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -98,15 +110,16 @@ export default function Tracker() {
 function TrackerCardView({ card, onOpen }: { card: TrackerCard; onOpen: () => void }) {
   const last = card.events[card.events.length - 1];
   const fromEmail = last?.source === "email" && !last.undone;
+  const byAgent = last?.source === "workflow" && /job agent/i.test(last.text) && card.status === "applied";
   const quiet = card.status === "applied" && ageInDays(card.updatedAt) >= 14;
 
   return (
-    <button type="button" onClick={onOpen} className="text-left" aria-label={`${card.title} at ${card.company} — open details`}>
+    <button type="button" onClick={onOpen} className="min-w-0 text-left" title={card.title} aria-label={`${card.title} at ${card.company} — open details`}>
       <Card className={cn("p-3 transition-colors hover:border-faint", fromEmail && "border-info/50")}>
         <div className="flex items-start gap-2.5">
           <CompanyAvatar name={card.company} size={26} />
           <div className="min-w-0">
-            <p className="text-sm leading-snug font-semibold">{card.title}</p>
+            <p className="line-clamp-3 text-sm leading-snug font-semibold [overflow-wrap:anywhere]">{card.title}</p>
             <p className="truncate text-xs text-muted">{card.company}</p>
           </div>
         </div>
@@ -126,6 +139,10 @@ function TrackerCardView({ card, onOpen }: { card: TrackerCard; onOpen: () => vo
         {fromEmail ? (
           <p className="mt-2 flex items-start gap-1 text-[11px] text-info">
             <Mail className="mt-px size-3 shrink-0" aria-hidden /> Updated from your inbox
+          </p>
+        ) : byAgent ? (
+          <p className="mt-2 flex items-start gap-1 text-[11px] text-info">
+            <Bot className="mt-px size-3 shrink-0" aria-hidden /> Applied by your Hirist agent
           </p>
         ) : quiet ? (
           <p className="mt-2 text-[11px] text-warning">No reply in {ageInDays(card.updatedAt)} days — follow up?</p>
