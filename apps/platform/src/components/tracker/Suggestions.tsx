@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { ExternalLink, HelpCircle } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { gmailUrl } from "@/lib/gmail-link";
 import { acceptSuggestion, dismissSuggestion, STATUS_LABEL, type Suggestion, type TrackerCard } from "@/lib/tracker";
 import type { ApplicationStatus } from "@/lib/types";
 
@@ -42,6 +43,7 @@ function SuggestionRow({ suggestion, cards }: { suggestion: Suggestion; cards: T
   const [cardId, setCardId] = useState(suggestion.cardId ?? "");
   const status = KIND_STATUS[d.kind];
   const card = cards.find((c) => c.id === cardId);
+  const link = gmailUrl(d.messageId);
 
   return (
     <li className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center">
@@ -54,6 +56,16 @@ function SuggestionRow({ suggestion, cards }: { suggestion: Suggestion; cards: T
           {d.from} · {new Date(d.date).toLocaleDateString()}
         </p>
         <p className="mt-1 text-xs text-text/80">“{d.evidence}”</p>
+        {link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-coral-strong hover:underline"
+          >
+            Open in Gmail <ExternalLink className="size-3" aria-hidden />
+          </a>
+        )}
         <p className="mt-1 text-xs text-muted">
           {suggestion.reason === "no-match" ? "Couldn't tell which job this is about." : "The wording isn't clear enough to be sure."}
         </p>

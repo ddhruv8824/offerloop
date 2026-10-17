@@ -36,6 +36,8 @@ export interface TrackerEvent {
   from?: ApplicationStatus;
   to?: ApplicationStatus;
   evidence?: string;
+  /** The Gmail message an email event came from — for "Open in Gmail". */
+  messageId?: string;
   undone?: boolean;
 }
 
@@ -321,8 +323,8 @@ export function applyDetections(detections: InboxDetection[], checkedIds: string
 
       const forward = movesForward(card.status, to);
       const event: TrackerEvent = forward
-        ? { id: uid(), at: now(), text: `Moved to ${STATUS_LABEL[to]} — email “${det.subject}”`, source: "email", from: card.status, to, evidence: det.evidence }
-        : { id: uid(), at: now(), text: `Email: “${det.subject}” (${STATUS_LABEL[to]}, no change)`, source: "email", evidence: det.evidence };
+        ? { id: uid(), at: now(), text: `Moved to ${STATUS_LABEL[to]} — email “${det.subject}”`, source: "email", from: card.status, to, evidence: det.evidence, messageId: det.messageId }
+        : { id: uid(), at: now(), text: `Email: “${det.subject}” (${STATUS_LABEL[to]}, no change)`, source: "email", evidence: det.evidence, messageId: det.messageId };
       cards = cards.map((c) =>
         c.id === card.id ? { ...c, status: forward ? to : c.status, updatedAt: forward ? now() : c.updatedAt, events: [...c.events, event] } : c,
       );
@@ -352,7 +354,7 @@ export function acceptSuggestion(messageId: string, cardId: string) {
               updatedAt: now(),
               events: [
                 ...c.events,
-                { id: uid(), at: now(), text: `Moved to ${STATUS_LABEL[to]} — you confirmed email “${sug.detection.subject}”`, source: "email", from: c.status, to, evidence: sug.detection.evidence },
+                { id: uid(), at: now(), text: `Moved to ${STATUS_LABEL[to]} — you confirmed email “${sug.detection.subject}”`, source: "email", from: c.status, to, evidence: sug.detection.evidence, messageId: sug.detection.messageId },
               ],
             }
           : c,

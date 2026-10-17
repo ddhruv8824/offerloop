@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ExternalLink, ListChecks, Mail, Trash2, Undo2, UserRound, Workflow } from "lucide-react";
 import { Dialog } from "@/components/Dialog";
 import { Badge, Button } from "@/components/ui";
+import { gmailUrl } from "@/lib/gmail-link";
 import { moveCard, removeCard, setNotes, STATUS_LABEL, undoEvent, type TrackerCard, type TrackerEvent } from "@/lib/tracker";
 import { STATUS_ORDER, type ApplicationStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,7 @@ function Body({ card, onClose }: { card: TrackerCard; onClose: () => void }) {
 
 function TimelineItem({ event, canUndo, onUndo }: { event: TrackerEvent; canUndo: boolean; onUndo: () => void }) {
   const Icon = SOURCE_ICON[event.source];
+  const link = event.source === "email" ? gmailUrl(event.messageId) : null;
   return (
     <li className="relative">
       <span
@@ -127,6 +129,11 @@ function TimelineItem({ event, canUndo, onUndo }: { event: TrackerEvent; canUndo
         <span className="text-[11px] text-faint">
           {new Date(event.at).toLocaleString()} · {event.source === "email" ? "from your inbox" : event.source === "workflow" ? "automation" : event.source === "sample" ? "sample" : "you"}
         </span>
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-coral-strong hover:underline">
+            <Mail className="size-3" aria-hidden /> Open email
+          </a>
+        )}
         {canUndo && (
           <button type="button" onClick={onUndo} className="inline-flex items-center gap-1 text-[11px] font-semibold text-coral-strong hover:underline">
             <Undo2 className="size-3" /> Undo

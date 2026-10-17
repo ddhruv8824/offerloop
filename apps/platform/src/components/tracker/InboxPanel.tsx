@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, FlaskConical, Loader2, Mail, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
+import { rememberInboxAccount } from "@/lib/gmail-link";
 import { applyDetections, companiesToWatch, type InboxDetection, type ScanSummary, type TrackerCard } from "@/lib/tracker";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +40,9 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
   const loadStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/inbox/status", { cache: "no-store" });
-      setStatus((await res.json()) as InboxStatus);
+      const next = (await res.json()) as InboxStatus;
+      setStatus(next);
+      rememberInboxAccount(next.connected ? next.email : null);
     } catch {
       setStatus({ configured: false, connected: false, email: null, sampleAvailable: false });
     }
