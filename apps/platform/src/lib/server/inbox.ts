@@ -162,12 +162,14 @@ export interface ScanEmail {
   from: string;
   subject: string;
   body: string;
+  /** Mass mail (List-Unsubscribe / List-Id / Precedence: bulk). */
+  bulk?: boolean;
 }
 
 export function classifyAll(emails: ScanEmail[]): Detection[] {
   return emails
     .map((e) => {
-      const c = classifyEmail(e.subject, e.body);
+      const c = classifyEmail(e.subject, e.body, { from: e.from, bulk: e.bulk });
       return c ? { ...c, messageId: e.id, date: e.date, from: e.from, subject: e.subject } : null;
     })
     .filter((d): d is Detection => d !== null)
@@ -190,6 +192,7 @@ export async function scanGmail(refreshToken: string, companies: string[], days:
       from: header("from"),
       subject: header("subject"),
       body: bodyText(msg.payload) || msg.snippet,
+      bulk: Boolean(header("list-unsubscribe") || header("list-id")) || /^(?:bulk|list|junk)$/i.test(header("precedence")),
     });
   }
   return { checked: ids.length, checkedIds: ids, detections: classifyAll(emails) };

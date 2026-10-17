@@ -2,7 +2,7 @@
 
 import "./storage-rename";
 import { useEffect, useState } from "react";
-import type { Confidence, EmailKind } from "./email-classifier";
+import { isNoise, type Confidence, type EmailKind } from "./email-classifier";
 import { getCompany, JOBS, TRACKER } from "./sample-data";
 import { STATUS_ORDER, type ApplicationStatus } from "./types";
 
@@ -302,7 +302,8 @@ export function applyDetections(detections: InboxDetection[], checkedIds: string
   update((s) => {
     const processed = new Set(s.processedEmails);
     let cards = s.cards;
-    const suggestions = [...s.suggestions];
+    // Drop earlier suggestions that turned out to be alerts or newsletters (rules got stricter).
+    const suggestions = s.suggestions.filter((x) => !isNoise(x.detection.subject, { from: x.detection.from }));
 
     for (const det of detections) {
       if (processed.has(det.messageId)) continue;

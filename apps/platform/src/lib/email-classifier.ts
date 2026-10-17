@@ -79,15 +79,51 @@ const RULES: Rule[] = [
   },
 ];
 
+/** Words that tie an email to a job application — weak signals need one to count. */
+const APPLICATION_CONTEXT =
+  /\b(?:your (?:application|candidacy|profile|resume|cv)|you(?:'ve| have)? applied|applying (?:for|to)|(?:the|this) (?:position|role|opening|vacancy)|hiring (?:team|manager|process)|recruit(?:er|ing|ment)|talent (?:acquisition|team)|interview(?:er|ing)? (?:panel|process|round|slot)|candidate)\b/i;
+
+/** Job alerts, digests and newsletters: about jobs, but never an update on one of yours. */
+const DIGEST_SUBJECT =
+  /\b(?:new jobs?\b|jobs? (?:for you|you may|matching|alert|near|picked)|job alerts?|recommended (?:jobs|for you|roles)|(?:is|are) hiring|top (?:jobs|companies)|\d+\+? (?:new )?(?:jobs|openings|roles|opportunities)|newsletter|digest|webinar|don'?t miss|people you may know|trending|this week in|weekly (?:roundup|update))/i;
+
+/**
+ * Senders that only send alerts, digests and community mail. LinkedIn's application
+ * confirmations (jobs-noreply) and recruiter messages (messages-noreply, inmail) are kept.
+ */
+const NOISE_SENDER =
+  /(?:newsletters?|digest|jobalerts?|job-alerts?|jobs-listings|alerts?|groups|editors|news|marketing|promotions?|invitations|updates)(?:-noreply)?@|@(?:e\.|em\.|mail\.|email\.)?(?:medium\.com|substack\.com|quora\.com)|hi\.wellfound\.com|@(?:jobalerts?|alerts)\./i;
+
+/** Extra facts about an email besides its text (all optional). */
+export interface EmailMeta {
+  /** The From header, e.g. "LinkedIn <newsletters-noreply@linkedin.com>". */
+  from?: string;
+  /** Sent in bulk (a List-Unsubscribe / List-Id header, or Precedence: bulk). */
+  bulk?: boolean;
+}
+
+/** Mail that's about jobs in general rather than one of yours. */
+export function isNoise(subject: string, meta: EmailMeta = {}): boolean {
+  return DIGEST_SUBJECT.test(subject) || (meta.from ? NOISE_SENDER.test(meta.from) : false);
+}
+
 function clip(text: string) {
   const t = text.replace(/\s+/g, " ").trim();
   return t.length > 140 ? `${t.slice(0, 137)}…` : t;
 }
 
-/** Classify one email. Returns null when it doesn't look like an application update. */
-export function classifyEmail(subject: string, body: string): EmailClassification | null {
+/**
+ * Classify one email. Returns null when it doesn't look like an update on an application:
+ * alerts, digests and newsletters are skipped; a weak signal ("unfortunately", "interview")
+ * only counts when the email is about an application; mass mail needs a strong signal.
+ */
+export function classifyEmail(subject: string, body: string, meta: EmailMeta = {}): EmailClassification | null {
+  if (isNoise(subject, meta)) return null;
   const text = `${subject}\n${body}`;
-  const hits = RULES.map((rule) => ({ rule, match: text.match(rule.pattern) })).filter((h) => h.match);
+  const aboutApplication = APPLICATION_CONTEXT.test(text);
+  const hits = RULES.map((rule) => ({ rule, match: text.match(rule.pattern) })).filter(
+    (h) => h.match && (h.rule.confidence === "high" || (aboutApplication && !meta.bulk)),
+  );
   if (!hits.length) return null;
 
   for (const kind of PRIORITY) {
