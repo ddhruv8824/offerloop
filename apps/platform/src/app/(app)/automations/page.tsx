@@ -85,9 +85,7 @@ export default function Automations() {
       </Card>
 
       {/* The job agent that applies on Hirist from the user's PC */}
-      {ready && (agent.connected || applyQueue.length > 0 || workflows.some((w) => w.steps.some((s) => s.actionId === "hirist.apply"))) && (
-        <HiristAgentCard agent={agent} queue={applyQueue} />
-      )}
+      {ready && <HiristAgentCard agent={agent} queue={applyQueue} />}
 
       {/* Recent runs */}
       {runs.length > 0 && (
