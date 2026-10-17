@@ -12,6 +12,10 @@
 param([switch]$DryRun)
 
 $ErrorActionPreference = "Continue"
+# The agent prints UTF-8 (dashes, arrows). Windows PowerShell reads programs' output in the
+# old console code page by default, which turns "—" into "ΓÇö"; read it as UTF-8 instead.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $agentDir = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $agentDir "data\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
