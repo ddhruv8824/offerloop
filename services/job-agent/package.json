@@ -40,7 +40,9 @@
     "applications": "tsx src/db/showApplications.ts",
     "daily": "tsx src/scheduler/runDailyAgent.ts",
     "daily:test": "tsx src/scheduler/checkDailyAgent.ts",
-    "runs": "tsx src/db/showAgentRuns.ts"
+    "runs": "tsx src/db/showAgentRuns.ts",
+    "connect": "tsx src/offerloop/runConnect.ts",
+    "connect:test": "tsx src/offerloop/checkConnect.ts"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.4.12",

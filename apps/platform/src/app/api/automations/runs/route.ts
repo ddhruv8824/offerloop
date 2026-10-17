@@ -1,20 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { approveRun, cancelRun, markTrackerApplied, StepFailure } from "@/lib/server/automations/engine";
+import { approveRun, cancelRun, markApplySynced, markTrackerApplied, StepFailure } from "@/lib/server/automations/engine";
 
 export const dynamic = "force-dynamic";
 
-/** Act on a run: approve the jobs to keep, cancel it, or confirm its jobs reached the Tracker. */
+/**
+ * Act on a run: approve the jobs to keep, cancel it, confirm its jobs reached the Tracker,
+ * or confirm Hirist apply results reached the Tracker ("apply-synced", with the queue item ids).
+ */
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { action?: unknown; runId?: unknown; jobIds?: unknown };
-  if (typeof body.runId !== "string") return NextResponse.json({ error: "Which run?" }, { status: 400 });
+  if (typeof body.runId !== "string" && body.action !== "apply-synced") return NextResponse.json({ error: "Which run?" }, { status: 400 });
   try {
     if (body.action === "approve") {
       const jobIds = Array.isArray(body.jobIds) ? body.jobIds.filter((x): x is string => typeof x === "string").slice(0, 100) : [];
-      await approveRun(body.runId, jobIds);
+      await approveRun(body.runId as string, jobIds);
     } else if (body.action === "cancel") {
-      await cancelRun(body.runId);
+      await cancelRun(body.runId as string);
+    } else if (body.action === "apply-synced") {
+      const ids = Array.isArray(body.jobIds) ? body.jobIds.filter((x): x is string => typeof x === "string").slice(0, 100) : [];
+      await markApplySynced(ids);
     } else if (body.action === "tracker-applied") {
-      await markTrackerApplied(body.runId);
+      await markTrackerApplied(body.runId as string);
     } else {
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
     }

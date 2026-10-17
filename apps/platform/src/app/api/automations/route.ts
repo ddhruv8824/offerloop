@@ -14,6 +14,9 @@ export async function GET() {
     workflows: data.workflows.map((wf) => ({ ...normaliseWorkflow(wf), nextRunAt: nextRunAt(wf) })),
     runs: data.runs.slice(0, 30),
     hasProfile: Boolean(data.profile),
+    // The latest Hirist applications and whether the job agent is connected (never its key).
+    applyQueue: data.applyQueue.slice(0, 60),
+    agent: data.agent ? { connected: true, createdAt: data.agent.createdAt, lastSeenAt: data.agent.lastSeenAt ?? null } : { connected: false },
     scheduler: schedulerStatus(),
   });
 }

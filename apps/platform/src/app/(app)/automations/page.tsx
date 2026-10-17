@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { AlertTriangle, CalendarClock, Clock, Loader2, Pencil, Play, Plus, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 import { ApprovalCard } from "@/components/automations/ApprovalCard";
+import { HiristAgentCard } from "@/components/automations/HiristAgentCard";
 import { RunDetails, RunStatusBadge } from "@/components/automations/RunDetails";
 import { FlowChips } from "@/components/FlowChips";
 import { ProfilePrompt } from "@/components/ProfilePrompt";
@@ -15,7 +16,7 @@ import { plural } from "@/lib/utils";
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 export default function Automations() {
-  const { workflows, runs, ready, error, scheduler } = useAutomations();
+  const { workflows, runs, ready, error, scheduler, applyQueue, agent } = useAutomations();
   const { profile, ready: profileReady } = useProfile();
 
   const waiting = runs.filter((r) => r.status === "waiting_approval");
@@ -82,6 +83,11 @@ export default function Automations() {
           </ul>
         )}
       </Card>
+
+      {/* The job agent that applies on Hirist from the user's PC */}
+      {ready && (agent.connected || applyQueue.length > 0 || workflows.some((w) => w.steps.some((s) => s.actionId === "hirist.apply"))) && (
+        <HiristAgentCard agent={agent} queue={applyQueue} />
+      )}
 
       {/* Recent runs */}
       {runs.length > 0 && (

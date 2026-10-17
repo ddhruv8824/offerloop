@@ -20,6 +20,7 @@ export function proxy(req: NextRequest) {
 
 export const config = {
   // Everything except the login itself, the health check, Next's static files and images,
-  // and the backup scheduler trigger (it checks its own CRON_SECRET).
-  matcher: ["/((?!login|api/login|api/health|api/automations/tick|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp|woff2?)$).*)"],
+  // the backup scheduler trigger (it checks its own CRON_SECRET) and the job agent's API
+  // (it checks its own key).
+  matcher: ["/((?!login|api/login|api/health|api/automations/tick|api/agent/|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp|woff2?)$).*)"],
 };

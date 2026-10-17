@@ -5,6 +5,7 @@
 // queue, so progress checks never wait behind a 10-second job search) → record the result.
 import { formatSalary, insightsFor, type JobInsights } from "@/lib/company-info";
 import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
+import { DAILY_APPLY_LIMIT, enqueue } from "@/lib/apply-queue";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -15,8 +16,8 @@ import { readStore, updateStore, type StoreData } from "../store";
 interface StepOutcome {
   status: "done" | "skipped" | "waiting";
   message: string;
-  /** Changes to save with the result (applied inside the store queue). */
-  apply?: (run: WorkflowRun, data: StoreData) => void;
+  /** Changes to save with the result (applied inside the store queue). May return the final message. */
+  apply?: (run: WorkflowRun, data: StoreData) => string | void;
 }
 
 interface StepContext {
@@ -54,7 +55,6 @@ const NOT_CONNECTED: Record<string, string> = {
   "companies.research": "Skipped: Company Intel is coming soon. Remove this step from the workflow.",
   "resume.tailor": "Skipped: tailoring needs your AI key and your review, so do it in Resume Studio for the jobs you keep.",
   "resume.cover": "Skipped: cover letters aren't built yet.",
-  "hirist.apply": "Skipped: applying on Hirist isn't connected yet. Apply from each job's page.",
   "interview.mock": "Skipped: Interview Coach is coming soon. Remove this step from the workflow.",
 };
 
@@ -170,6 +170,34 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
       };
     }
 
+    case "hirist.apply": {
+      // The server can't use the user's Hirist login: approved jobs go to a queue that the
+      // job agent on their PC works through, in their own logged-in Chrome.
+      const max = Math.max(1, Math.min(DAILY_APPLY_LIMIT, Number(settings.max ?? DAILY_APPLY_LIMIT)));
+      const queueJobs = jobs.map((j) => ({ id: j.id, title: j.title, company: j.company, location: j.location, url: j.url, source: j.source }));
+      return {
+        status: "done",
+        message: "Queued for your job agent.",
+        apply: (r, data) => {
+          const result = enqueue(data.applyQueue, queueJobs, { id: r.id, workflowName: r.workflowName }, { max, uid: newUid });
+          const parts: string[] = [];
+          if (result.added.length) {
+            parts.push(
+              `${plural(result.added.length, "Hirist job")} queued for your job agent` +
+                (data.agent ? "." : " — connect the agent on your PC (Automations → Hirist agent) to apply."),
+            );
+          } else {
+            parts.push("No new Hirist jobs to apply to.");
+          }
+          if (result.duplicates.length) parts.push(`${plural(result.duplicates.length, "job")} already queued or applied.`);
+          if (result.notHirist.length) parts.push(`${plural(result.notHirist.length, "job")} from career pages: apply on the company's site.`);
+          const extra = jobs.length - result.added.length - result.duplicates.length - result.notHirist.length;
+          if (extra > 0) parts.push(`${extra} more over this step's limit of ${max}.`);
+          return parts.join(" ");
+        },
+      };
+    }
+
     case "dsa.questions": {
       if (!jobs.length) return { status: "skipped", message: "No jobs to prepare for." };
       const companies = [...new Set(jobs.map((j) => j.company))];
@@ -248,9 +276,9 @@ async function advance(runId: string): Promise<void> {
         finish(run, "failed", state.message);
         return false;
       }
-      outcome.apply?.(run, data);
+      const message = outcome.apply?.(run, data);
       state.status = outcome.status;
-      state.message = outcome.message;
+      state.message = typeof message === "string" ? message : outcome.message;
       if (outcome.status === "waiting") {
         run.status = "waiting_approval";
         return false;
@@ -321,6 +349,13 @@ export async function markTrackerApplied(runId: string): Promise<void> {
   await updateStore((data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (run) run.trackerApplied = true;
+  });
+}
+
+/** The browser has put these Hirist apply results on the Tracker. */
+export async function markApplySynced(itemIds: string[]): Promise<void> {
+  await updateStore((data) => {
+    for (const item of data.applyQueue) if (itemIds.includes(item.id)) item.trackerSynced = true;
   });
 }
 

@@ -120,11 +120,11 @@ export const ACTIONS: ActionDef[] = [
     tool: "jobs",
     title: "Apply on Hirist",
     description:
-      "Apply to the approved Hirist jobs from your logged-in Hirist session, filling questionnaires from your profile. Questions it can't answer come back to you.",
+      "Apply to the Hirist jobs you approved, from your own logged-in Hirist in Chrome on your PC (the job agent). At most 15 a day; jobs with screening questions come back to you.",
     needs: ["job", "approval"],
     produces: [],
     actsForYou: true,
-    settings: [{ key: "max", label: "At most", type: "number", default: 3, suffix: "per day" }],
+    settings: [{ key: "max", label: "At most", type: "number", default: 15, suffix: "per run" }],
   },
   {
     id: "tracker.add",

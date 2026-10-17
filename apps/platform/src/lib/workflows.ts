@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { toSearchProfile } from "./job-finder";
 import { getProfile } from "./profile";
-import { addCard, trackedUrls } from "./tracker";
+import type { ApplyItem } from "./apply-queue";
+import { addCard, recordAgentResult, trackedUrls } from "./tracker";
 import { normaliseWorkflow, type Workflow, type WorkflowRun } from "./workflow-defs";
 
 export * from "./workflow-defs";
@@ -15,11 +16,22 @@ export * from "./workflow-defs";
 
 export type SavedWorkflow = Workflow & { nextRunAt: string | null };
 
+export type { ApplyItem };
+
+export interface AgentStatus {
+  connected: boolean;
+  createdAt?: string;
+  lastSeenAt?: string | null;
+}
+
 export interface AutomationsState {
   workflows: SavedWorkflow[];
   runs: WorkflowRun[];
   hasProfile: boolean;
   scheduler: { running: boolean; startedAt: string | null; lastTickAt: string | null };
+  /** Latest Hirist applications handled by the job agent on the user's PC. */
+  applyQueue: ApplyItem[];
+  agent: AgentStatus;
 }
 
 interface Snapshot {
@@ -28,7 +40,14 @@ interface Snapshot {
   data: AutomationsState;
 }
 
-const EMPTY: AutomationsState = { workflows: [], runs: [], hasProfile: false, scheduler: { running: false, startedAt: null, lastTickAt: null } };
+const EMPTY: AutomationsState = {
+  workflows: [],
+  runs: [],
+  hasProfile: false,
+  scheduler: { running: false, startedAt: null, lastTickAt: null },
+  applyQueue: [],
+  agent: { connected: false },
+};
 let snapshot: Snapshot = { ready: false, error: null, data: EMPTY };
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -103,6 +122,62 @@ async function applyTrackerQueue(runs: WorkflowRun[]) {
   }
 }
 
+/* ── Job agent results: put them on the Tracker here (the Tracker lives in this browser) ── */
+
+const SYNCED_KEY = "offerloop.agent.synced";
+
+/** Results already put on this browser's Tracker — so a lost acknowledgement never adds them twice. */
+function syncedHere(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SYNCED_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberSynced(ids: string[]) {
+  try {
+    localStorage.setItem(SYNCED_KEY, JSON.stringify([...syncedHere(), ...ids].slice(-500)));
+  } catch {
+    // storage blocked: the server-side flag still prevents repeats in the normal case
+  }
+}
+
+async function applyAgentResults(queue: ApplyItem[]) {
+  const already = syncedHere();
+  const finished = queue.filter((q) => !q.trackerSynced && q.status !== "queued" && q.status !== "in_progress");
+  const done = finished.filter((q) => !already.has(q.id));
+  if (!finished.length) return;
+  for (const item of done) {
+    recordAgentResult({
+      title: item.title,
+      company: item.company,
+      url: item.url,
+      status: item.status as Exclude<typeof item.status, "queued" | "in_progress">,
+      message: item.message,
+      workflowName: item.workflowName,
+    });
+  }
+  rememberSynced(done.map((q) => q.id));
+  await api("/api/automations/runs", { method: "POST", body: JSON.stringify({ action: "apply-synced", jobIds: finished.map((q) => q.id) }) }).catch(
+    () => undefined,
+  );
+}
+
+/* ── Agent key ─────────────────────────────────────────── */
+
+/** Make a new key for the job agent (replaces the old one). Shown once — copy it. */
+export async function createAgentKey(): Promise<string> {
+  const { key } = await api<{ key: string }>("/api/automations/agent", { method: "POST" });
+  await refreshAutomations();
+  return key;
+}
+
+export async function disconnectAgent(): Promise<void> {
+  await api("/api/automations/agent", { method: "DELETE" });
+  await refreshAutomations();
+}
+
 /* ── Loading and polling ──────────────────────────────── */
 
 async function load(): Promise<void> {
@@ -110,6 +185,7 @@ async function load(): Promise<void> {
     let data = await api<AutomationsState>("/api/automations");
     if (await migrateLegacy(data.workflows.length === 0)) data = await api<AutomationsState>("/api/automations");
     await applyTrackerQueue(data.runs);
+    await applyAgentResults(data.applyQueue ?? []);
     publish({ ready: true, error: null, data });
   } catch (err) {
     publish({ ...snapshot, ready: true, error: err instanceof Error ? err.message : "Couldn't load automations." });

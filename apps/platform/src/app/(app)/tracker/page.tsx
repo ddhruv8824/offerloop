@@ -8,6 +8,7 @@ import { InboxPanel } from "@/components/tracker/InboxPanel";
 import { Suggestions } from "@/components/tracker/Suggestions";
 import { Badge, Button, Card, CompanyAvatar, PageHeader } from "@/components/ui";
 import { clearSampleCards, STATUS_LABEL, useTracker, type TrackerCard } from "@/lib/tracker";
+import { useAutomations } from "@/lib/workflows";
 import { STATUS_ORDER, type ApplicationStatus } from "@/lib/types";
 import { cn, daysAgo } from "@/lib/utils";
 
@@ -25,6 +26,8 @@ const ageInDays = (iso: string) => Math.floor((Date.now() - new Date(iso).getTim
 
 export default function Tracker() {
   const state = useTracker();
+  // Keeps checking the server, so jobs the Hirist agent applied to land here while it's open.
+  useAutomations();
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 

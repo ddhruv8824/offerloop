@@ -200,6 +200,66 @@ export function trackedUrls(): Set<string> {
   return new Set(read().cards.map((c) => c.url).filter((u): u is string => Boolean(u)));
 }
 
+/** What the job agent did with one approved Hirist job (see lib/apply-queue.ts). */
+export interface AgentApplyResult {
+  title: string;
+  company: string;
+  url: string;
+  status: "applied" | "already_applied" | "needs_input" | "skipped" | "failed";
+  message?: string;
+  workflowName: string;
+}
+
+/**
+ * Put a job agent result on the Tracker: applied jobs move to Applied (the card is created
+ * if the job wasn't tracked yet); jobs that need the person get a card with a next step.
+ */
+export function recordAgentResult(result: AgentApplyResult) {
+  update((s) => {
+    const at = now();
+    const existing = s.cards.find((c) => c.url && c.url === result.url);
+    const applied = result.status === "applied" || result.status === "already_applied";
+    const text =
+      result.status === "applied" ? "Applied on Hirist by your job agent"
+      : result.status === "already_applied" ? "Your job agent found you'd already applied on Hirist"
+      : result.status === "needs_input" ? `Your job agent couldn't finish on Hirist: ${result.message ?? "it needs you"}`
+      : result.status === "skipped" ? `Not applied by your job agent: ${result.message ?? "not a one-click Hirist job"}`
+      : `Your job agent couldn't apply: ${result.message ?? "something went wrong"}`;
+    const nextStep = result.status === "needs_input" ? "Finish applying on Hirist" : result.status === "skipped" ? "Apply on the company's site" : undefined;
+
+    if (!existing) {
+      // Only jobs that were (or should be) applied for earn a new card; failures stay off the board.
+      if (result.status === "failed") return s;
+      const status: ApplicationStatus = applied ? "applied" : "saved";
+      const card: TrackerCard = {
+        id: uid(),
+        title: result.title,
+        company: result.company,
+        url: result.url,
+        source: "Hirist",
+        status,
+        createdAt: at,
+        updatedAt: at,
+        nextStep,
+        events: [{ id: uid(), at, text: `${text} (workflow “${result.workflowName}”)`, source: "workflow", to: status }],
+      };
+      return { ...s, cards: [card, ...s.cards] };
+    }
+    const move = applied && movesForward(existing.status, "applied");
+    const event: TrackerEvent = move
+      ? { id: uid(), at, text, source: "workflow", from: existing.status, to: "applied" }
+      : { id: uid(), at, text, source: "workflow" };
+    return {
+      ...s,
+      cards: s.cards.map((c) =>
+        c.id === existing.id
+          ? { ...c, status: move ? "applied" : c.status, updatedAt: move ? at : c.updatedAt, nextStep: nextStep ?? c.nextStep, events: [...c.events, event] }
+          : c,
+      ),
+    };
+  });
+}
+
 export function moveCard(cardId: string, to: ApplicationStatus) {
   update((s) => ({
     ...s,

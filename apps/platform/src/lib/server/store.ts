@@ -7,6 +7,7 @@
 // this becomes per-user data.
 import path from "node:path";
 import { openStorage } from "@offerloop/storage";
+import { trimQueue, type ApplyItem } from "@/lib/apply-queue";
 import type { SearchProfile } from "@/lib/jobs";
 import type { SalaryObservation } from "@/lib/salary";
 import type { Workflow, WorkflowRun } from "@/lib/workflow-defs";
@@ -22,6 +23,10 @@ export interface StoreData {
   salaryObservations: SalaryObservation[];
   /** Per role keyword: when its wide salary sample last ran. */
   marketScans: Record<string, string>;
+  /** Approved Hirist jobs waiting for (or done by) the job agent on the user's PC. */
+  applyQueue: ApplyItem[];
+  /** The job agent's key, stored only as a hash. */
+  agent?: { keyHash: string; createdAt: string; lastSeenAt?: string };
 }
 
 const MAX_RUNS = 100;
@@ -39,7 +44,7 @@ const KEY = "automations";
 const g = globalThis as unknown as { __offerloopStore?: { queue: Promise<unknown> } };
 const state = (g.__offerloopStore ??= { queue: Promise.resolve() });
 
-const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {} });
+const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {}, applyQueue: [] });
 
 async function load(): Promise<StoreData> {
   try {
@@ -52,6 +57,7 @@ async function load(): Promise<StoreData> {
 
 async function save(data: StoreData) {
   data.runs = data.runs.slice(0, MAX_RUNS);
+  data.applyQueue = trimQueue(data.applyQueue);
   for (const id of Object.keys(data.seenJobs)) data.seenJobs[id] = data.seenJobs[id].slice(-MAX_SEEN);
   const cutoff = new Date(Date.now() - OBSERVATION_DAYS * 86_400_000).toISOString();
   data.salaryObservations = data.salaryObservations.filter((o) => o.seenAt >= cutoff).slice(-MAX_OBSERVATIONS);

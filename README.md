@@ -124,7 +124,12 @@ Workflows run on the server, so they work with the browser closed.
   once; after downtime it catches up once, for the latest missed slot.
 - **Runner** — `lib/server/automations/engine.ts`: one step at a time, saved after each,
   pausing at "Wait for my approval". Steps without a live backend yet (resume tailoring,
-  Hirist apply, company research, mock interview) are marked "skipped", never faked.
+  company research, mock interview) are marked "skipped", never faked.
+- **Apply on Hirist** — approved Hirist jobs go to a queue (`lib/apply-queue.ts`, at most 15
+  started a day). The job agent on the user's PC (`services/job-agent`, `npm run connect`)
+  takes them over `/api/agent/*` with a key made on the Automations page, applies from the
+  user's own logged-in Chrome, and reports back; the browser puts results on the Tracker.
+  Setup: [`services/job-agent/docs/offerloop-agent.md`](services/job-agent/docs/offerloop-agent.md).
 - **Tracker** — lives in the browser, so "Add to my tracker" queues jobs on the run and the
   next open Offerloop tab adds them (no duplicates).
 - **Backup trigger** — for hosts that sleep, set `CRON_SECRET` (16+ characters) and have any
@@ -169,7 +174,7 @@ offerloop/
 ├── shared/
 │   └── storage/           Saved data: JSON files, or Postgres when DATABASE_URL is set
 ├── services/
-│   └── job-agent/         Job application & discovery agent (runs locally, not deployed)
+│   └── job-agent/         Hirist job agent: runs on your PC, applies to approved jobs (npm run connect)
 └── Dockerfile             Single-container deployment image
 ```
 
