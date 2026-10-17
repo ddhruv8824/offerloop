@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractText } from "@offerloop/resume-studio/server";
+import { resumeFacts } from "@/lib/resume-facts";
 import { skillsInText } from "@/lib/skills";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +9,9 @@ export const runtime = "nodejs";
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /**
- * Onboarding: read an uploaded resume (PDF or DOCX) and return the skills it mentions,
- * matched against the skill catalogue (lib/skills.ts). No AI involved, and the file isn't
+ * Onboarding: read an uploaded resume (PDF or DOCX) and return the skills it mentions
+ * (matched against the catalogue in lib/skills.ts) plus best guesses at the name, current
+ * role and years of experience (lib/resume-facts.ts). No AI involved, and the file isn't
  * stored — it's read once and dropped.
  */
 export async function POST(req: Request) {
@@ -35,5 +37,5 @@ export async function POST(req: Request) {
       { status: 422 },
     );
   }
-  return NextResponse.json({ skills: skillsInText(text) });
+  return NextResponse.json({ skills: skillsInText(text), facts: resumeFacts(text) });
 }

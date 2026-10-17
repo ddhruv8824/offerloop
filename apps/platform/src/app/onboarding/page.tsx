@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, FileUp, Loader2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { SampleProfileButton } from "@/components/SampleProfileButton";
-import { mergeSkills, readResumeSkills, SkillPicker } from "@/components/SkillPicker";
+import { mergeSkills, readResume, SkillPicker } from "@/components/SkillPicker";
 import { Button, Card } from "@/components/ui";
 import { useProfile } from "@/lib/profile";
 import type { CareerProfile } from "@/lib/types";
@@ -15,6 +15,10 @@ const CITIES = ["Bangalore", "Pune", "Hyderabad", "Mumbai", "Delhi NCR", "Chenna
 const DEAL_BREAKERS = ["No night shifts", "No service bond", "No relocation", "No service companies", "No 6-day weeks", "Remote only"];
 
 const STEPS = ["About you", "Your next role", "Your skills", "Deal-breakers"] as const;
+
+/** ["name", "current role", "4 yrs"] → "name, current role and 4 yrs". */
+const listText = (items: string[]) =>
+  items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}` : items[0] ?? "";
 
 function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -54,6 +58,10 @@ export default function Onboarding() {
   const [resumeRead, setResumeRead] = useState<{ fileName: string; count: number } | null>(null);
   const [readingResume, setReadingResume] = useState(false);
   const [resumeError, setResumeError] = useState("");
+  // What the resume filled in on step 1 ("name", "current role", "4 yrs experience").
+  const [resumeFilled, setResumeFilled] = useState<string[]>([]);
+  // The years slider was moved by hand: the resume doesn't change it then.
+  const [yearsTouched, setYearsTouched] = useState(false);
   const [customBreaker, setCustomBreaker] = useState("");
   const [draft, setDraft] = useState<CareerProfile>({
     name: "",
@@ -81,8 +89,20 @@ export default function Onboarding() {
     setReadingResume(true);
     setResumeError("");
     try {
-      const found = await readResumeSkills(file);
-      setDraft((d) => ({ ...d, skills: mergeSkills(d.skills, found) }));
+      const { skills: found, facts } = await readResume(file);
+      // Facts only fill what's still empty — never overwrite what the person typed.
+      const filled: string[] = [];
+      setDraft((d) => {
+        const next = { ...d, skills: mergeSkills(d.skills, found) };
+        if (facts.name && !d.name.trim()) [next.name, filled[filled.length]] = [facts.name, "name"];
+        if (facts.currentRole && !d.headline.trim()) [next.headline, filled[filled.length]] = [facts.currentRole, "current role"];
+        if (facts.experienceYears !== undefined && !yearsTouched) {
+          next.experienceYears = Math.min(15, facts.experienceYears);
+          filled.push(`${facts.experienceYears} yr${facts.experienceYears === 1 ? "" : "s"} of experience`);
+        }
+        return next;
+      });
+      setResumeFilled(filled);
       setResumeRead({ fileName: file.name, count: found.length });
     } catch (err) {
       setResumeError(err instanceof Error ? err.message : "Couldn't read that resume.");
@@ -156,6 +176,7 @@ export default function Onboarding() {
                   {!readingResume && resumeRead && (
                     <p className="mt-2 text-xs text-success">
                       Found {resumeRead.count} skill{resumeRead.count === 1 ? "" : "s"}{" "}— you&apos;ll review them in the skills step.
+                      {resumeFilled.length > 0 && <> Filled in your {listText(resumeFilled)} from it — check below.</>}
                     </p>
                   )}
                   {resumeError && <p className="mt-2 text-xs text-danger">{resumeError}</p>}
@@ -184,7 +205,10 @@ export default function Onboarding() {
                     min={0}
                     max={15}
                     value={draft.experienceYears}
-                    onChange={(e) => set("experienceYears", Number(e.target.value))}
+                    onChange={(e) => {
+                      setYearsTouched(true);
+                      set("experienceYears", Number(e.target.value));
+                    }}
                     className="w-full accent-[var(--color-coral)]"
                   />
                 </Field>

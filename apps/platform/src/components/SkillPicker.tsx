@@ -3,6 +3,7 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { FileUp, Loader2, Plus, Sparkles, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui";
+import type { ResumeFacts } from "@/lib/resume-facts";
 import { normalizeSkill, searchSkills, suggestedSkills } from "@/lib/skills";
 import { cn } from "@/lib/utils";
 
@@ -18,14 +19,14 @@ export function mergeSkills(current: string[], more: string[]): string[] {
   return out;
 }
 
-/** Upload a resume and get back the skills it mentions (see /api/profile/resume-skills). */
-export async function readResumeSkills(file: File): Promise<string[]> {
+/** Upload a resume: the skills it mentions and basic facts (see /api/profile/resume-skills). */
+export async function readResume(file: File): Promise<{ skills: string[]; facts: ResumeFacts }> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch("/api/profile/resume-skills", { method: "POST", body: form });
-  const body = (await res.json().catch(() => ({}))) as { skills?: string[]; error?: string };
+  const body = (await res.json().catch(() => ({}))) as { skills?: string[]; facts?: ResumeFacts; error?: string };
   if (!res.ok) throw new Error(body.error ?? "Couldn't read that resume.");
-  return body.skills ?? [];
+  return { skills: body.skills ?? [], facts: body.facts ?? {} };
 }
 
 interface Props {
@@ -93,12 +94,12 @@ export function SkillPicker({ skills, onChange, targetRole, fromResume, onResume
     }
   };
 
-  const readResume = async (file: File | undefined) => {
+  const readFromResume = async (file: File | undefined) => {
     if (!file) return;
     setReading(true);
     setReadError("");
     try {
-      const found = await readResumeSkills(file);
+      const { skills: found } = await readResume(file);
       onChange(mergeSkills(skills, found));
       onResumeRead?.(file.name, found);
       if (!found.length) setReadError("We didn't find any skills we know in that resume. Add them by hand below.");
@@ -135,7 +136,7 @@ export function SkillPicker({ skills, onChange, targetRole, fromResume, onResume
           accept=".pdf,.docx"
           className="sr-only"
           aria-label="Resume file to read skills from"
-          onChange={(e) => readResume(e.target.files?.[0])}
+          onChange={(e) => readFromResume(e.target.files?.[0])}
         />
         {readError && <p className="w-full text-sm text-danger">{readError}</p>}
       </div>
