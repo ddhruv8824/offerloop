@@ -87,8 +87,11 @@ try {
     await sleep(WATCH_EVERY_MS);
   }
 } catch (error) {
-  if (error instanceof OfferloopError) {
-    console.error(`\n${error.message}`);
+  // Expected problems (Chrome not open, Offerloop unreachable, login timed out) print just
+  // their message; anything else keeps its stack for debugging.
+  const expected = error instanceof OfferloopError || (error instanceof Error && /Chrome|hirist|log ?in|Browser was closed/i.test(error.message));
+  if (expected) {
+    console.error(`\n${(error as Error).message}`);
     process.exit(1);
   }
   throw error;

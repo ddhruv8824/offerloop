@@ -30,7 +30,9 @@ export async function connectToChrome(): Promise<Session> {
     throw new Error(
       "Could not connect to Chrome on port 9222.\n\n" +
         "Start Chrome with remote debugging enabled:\n\n" +
-        CHROME_COMMAND
+        CHROME_COMMAND +
+        "\n\nFrom Git Bash:\n\n" +
+        '"/c/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\\hirist-agent-profile" &'
     );
   }
 
