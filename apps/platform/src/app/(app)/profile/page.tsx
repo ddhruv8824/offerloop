@@ -98,7 +98,7 @@ export default function Profile() {
               );
             })}
           </ul>
-          <p className="border-t border-line px-5 py-3 text-xs text-muted">Stored in this browser for now. Accounts and sync come with the backend.</p>
+          <p className="border-t border-line px-5 py-3 text-xs text-muted">Saved to your account and kept in sync across your devices.</p>
         </Card>
       </div>
     </div>
