@@ -35,3 +35,8 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Optional: Signal alerts when a workflow waits for approval (deploy/RENDER.md).
+      - key: SIGNAL_PHONE
+        sync: false
+      - key: SIGNAL_CALLMEBOT_KEY
+        sync: false

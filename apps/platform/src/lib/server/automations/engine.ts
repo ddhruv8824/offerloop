@@ -6,7 +6,9 @@
 import { formatSalary, insightsFor, type JobInsights } from "@/lib/company-info";
 import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
 import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
+import { approvalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
+import { trySendSignal } from "@/lib/server/notify/signal";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -301,6 +303,7 @@ async function advance(runId: string): Promise<void> {
     }
 
     // 3. Record the result — unless the run was cancelled or replaced while the step worked.
+    let nowWaiting: WorkflowRun | null = null;
     const more = await updateStore((data) => {
       const run = data.runs.find((r) => r.id === runId);
       if (!run || run.status !== "running" || run.cursor !== claim.cursor) return false;
@@ -316,13 +319,22 @@ async function advance(runId: string): Promise<void> {
       state.message = typeof message === "string" ? message : outcome.message;
       if (outcome.status === "waiting") {
         run.status = "waiting_approval";
+        nowWaiting = structuredClone(run);
         return false;
       }
       run.cursor++;
       return true;
     });
+    // Waiting for you: say so on Signal too (when it's set up), so you can approve from your phone.
+    if (nowWaiting) notifyWaiting(nowWaiting);
     if (!more) return;
   }
+}
+
+function notifyWaiting(run: WorkflowRun) {
+  const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
+  if (!site || !run.jobs.length) return;
+  void trySendSignal(approvalMessage(run, site));
 }
 
 const background = (runId: string) => void advance(runId).catch((err) => console.error("[automations] run crashed:", err));
