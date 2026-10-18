@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { AlertTriangle, CalendarClock, Clock, Loader2, Pencil, Play, Plus, Trash2, Workflow as WorkflowIcon } from "lucide-react";
+import { AlertTriangle, CalendarClock, Clock, Loader2, Pencil, Play, Plus, Square, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 import { ApprovalCard } from "@/components/automations/ApprovalCard";
 import { HiristAgentCard } from "@/components/automations/HiristAgentCard";
 import { SignalCard } from "@/components/automations/SignalCard";
@@ -11,7 +11,7 @@ import { FlowChips } from "@/components/FlowChips";
 import { ProfilePrompt } from "@/components/ProfilePrompt";
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { useProfile } from "@/lib/profile";
-import { deleteWorkflow, describeTrigger, runWorkflow, saveWorkflow, TEMPLATES, useAutomations, type SavedWorkflow, type WorkflowRun } from "@/lib/workflows";
+import { cancelRun, deleteWorkflow, describeTrigger, runWorkflow, saveWorkflow, TEMPLATES, useAutomations, type SavedWorkflow, type WorkflowRun } from "@/lib/workflows";
 import { plural } from "@/lib/utils";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -107,6 +107,7 @@ export default function Automations() {
                   </summary>
                   <div className="px-5 pb-4">
                     <RunDetails run={run} />
+                    {run.status === "running" && <StopRunButton runId={run.id} />}
                   </div>
                 </details>
               </li>
@@ -249,5 +250,28 @@ function WorkflowRow({ workflow: wf, lastRun }: { workflow: SavedWorkflow; lastR
         </p>
       )}
     </li>
+  );
+}
+
+/** Stop a run that's working (or looks stuck): nothing more happens in it. */
+function StopRunButton({ runId }: { runId: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="ghost"
+      className="mt-3 px-3 py-1.5 text-xs"
+      disabled={busy}
+      onClick={async () => {
+        if (!confirm("Stop this run? Steps that already finished stay as they are.")) return;
+        setBusy(true);
+        try {
+          await cancelRun(runId);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} Stop this run
+    </Button>
   );
 }

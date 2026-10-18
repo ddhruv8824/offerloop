@@ -267,6 +267,17 @@ const finish = (run: WorkflowRun, status: WorkflowRun["status"], error?: string)
   if (error) run.error = error;
 };
 
+/** No step should take this long; if one does, it fails with a message instead of spinning. */
+const STEP_TIME_LIMIT_MS = 6 * 60_000;
+
+function withTimeLimit<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StepFailure(`This step took over ${Math.round(ms / 60_000)} minutes and was stopped. Run it again.`)), ms);
+  });
+  return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+}
+
 // Runs this process is working on right now. A run marked "running" that isn't in here and
 // hasn't moved for a while belongs to a process that's gone (a deploy or restart stopped it).
 const g = globalThis as unknown as { __offerloopActiveRuns?: Set<string> };
@@ -312,7 +323,10 @@ async function advanceSteps(runId: string): Promise<void> {
     let failure: string | null = null;
     try {
       const needsJobs = ACTION_BY_ID[claim.step.actionId]?.needs.includes("job");
-      outcome = needsJobs && !activeJobs(claim.ctx.run).length ? { status: "skipped", message: "No jobs to work on." } : await runStep(claim.step, claim.ctx);
+      outcome =
+        needsJobs && !activeJobs(claim.ctx.run).length
+          ? { status: "skipped", message: "No jobs to work on." }
+          : await withTimeLimit(runStep(claim.step, claim.ctx), STEP_TIME_LIMIT_MS);
     } catch (err) {
       failure = err instanceof StepFailure ? err.message : "This step hit an unexpected error.";
       if (!(err instanceof StepFailure)) console.error(`[automations] ${claim.step.actionId} failed:`, err);
@@ -436,8 +450,8 @@ export async function markApplySynced(itemIds: string[]): Promise<void> {
   });
 }
 
-/** No step takes this long; one "running" this long with no live process was cut off. */
-export const STUCK_AFTER_MS = 5 * 60_000;
+/** Longer than any step may run (STEP_TIME_LIMIT_MS): one "running" this long was cut off. */
+export const STUCK_AFTER_MS = 7 * 60_000;
 
 /**
  * Pick up runs a restart cut off mid-step. Render starts the new server before stopping the old
