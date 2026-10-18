@@ -6,7 +6,7 @@
 import { dueSlot, isValidTimeZone, nextOccurrence, type Schedule } from "@/lib/schedule";
 import type { Workflow } from "@/lib/workflow-defs";
 import { readStore, updateStore } from "../store";
-import { failInterruptedRuns, startRun } from "./engine";
+import { recoverStuckRuns, startRun } from "./engine";
 
 const TICK_MS = 30_000;
 export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
@@ -28,6 +28,8 @@ export async function tick(now = Date.now()): Promise<{ started: string[] }> {
   state.ticking = true;
   const started: string[] = [];
   try {
+    // Runs a restart cut off mid-step: start the step again (see recoverStuckRuns).
+    await recoverStuckRuns(now).catch((err) => console.error("[automations] couldn't check for stuck runs:", err));
     const { workflows } = await readStore();
     for (const wf of workflows) {
       if (!wf.enabled || wf.trigger.kind === "manual" || !wf.steps.length) continue;
@@ -69,10 +71,8 @@ export function startScheduler() {
   state.startedAt = new Date().toISOString();
   state.timer = setInterval(() => void tick(), TICK_MS);
   state.timer.unref?.(); // never keep the process alive just for this
-  // Anything left "running" belongs to a process that no longer exists; then catch up on missed slots.
-  void failInterruptedRuns()
-    .catch((err) => console.error("[automations] startup check failed:", err))
-    .then(() => tick());
+  // Catch up on missed slots (and pick up runs a restart cut off) straight away.
+  void tick();
   console.log("[automations] scheduler started (checks every 30s)");
 }
 

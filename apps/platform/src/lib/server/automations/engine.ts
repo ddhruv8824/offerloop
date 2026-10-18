@@ -267,8 +267,22 @@ const finish = (run: WorkflowRun, status: WorkflowRun["status"], error?: string)
   if (error) run.error = error;
 };
 
+// Runs this process is working on right now. A run marked "running" that isn't in here and
+// hasn't moved for a while belongs to a process that's gone (a deploy or restart stopped it).
+const g = globalThis as unknown as { __offerloopActiveRuns?: Set<string> };
+const activeRuns = (g.__offerloopActiveRuns ??= new Set<string>());
+
 /** Run steps from the cursor until the run finishes, fails, or has to wait for approval. */
 async function advance(runId: string): Promise<void> {
+  activeRuns.add(runId);
+  try {
+    await advanceSteps(runId);
+  } finally {
+    activeRuns.delete(runId);
+  }
+}
+
+async function advanceSteps(runId: string): Promise<void> {
   for (;;) {
     // 1. Claim the next step.
     const claim = await updateStore((data) => {
@@ -280,6 +294,7 @@ async function advance(runId: string): Promise<void> {
         return null;
       }
       state.status = "running";
+      state.startedAt = new Date().toISOString();
       const workflow = data.workflows.find((w) => w.id === run.workflowId);
       const step: WorkflowStep = workflow?.steps.find((s) => s.uid === state.uid) ?? { uid: state.uid, actionId: state.actionId, settings: {} };
       const ctx: StepContext = {
@@ -421,23 +436,50 @@ export async function markApplySynced(itemIds: string[]): Promise<void> {
   });
 }
 
-/** Runs that were mid-step when the server stopped can't be resumed safely; say so. */
-export async function failInterruptedRuns(): Promise<void> {
-  const data = await readStore();
-  if (!data.runs.some((r) => r.status === "running")) return;
-  await updateStore((d) => {
+/** No step takes this long; one "running" this long with no live process was cut off. */
+export const STUCK_AFTER_MS = 5 * 60_000;
+
+/**
+ * Pick up runs a restart cut off mid-step. Render starts the new server before stopping the old
+ * one, so "running" at startup doesn't mean dead — only a step that hasn't moved for
+ * STUCK_AFTER_MS, in a run no live process here is working on, is. Such a run gets its step
+ * started again, once; cut off a second time, it fails with a message instead of spinning forever.
+ * Called on every scheduler tick.
+ */
+export async function recoverStuckRuns(now = Date.now()): Promise<number> {
+  const stuck = (run: WorkflowRun) => {
+    if (run.status !== "running" || activeRuns.has(run.id)) return false;
+    const since = Date.parse(run.steps[run.cursor]?.startedAt ?? run.startedAt);
+    return Number.isFinite(since) && now - since > STUCK_AFTER_MS;
+  };
+  if (!(await readStore()).runs.some(stuck)) return 0;
+  const resume = await updateStore((d) => {
+    const ids: string[] = [];
     for (const run of d.runs) {
-      if (run.status !== "running") continue;
-      // The step that was in flight didn't finish either; don't leave it looking busy.
-      for (const step of run.steps) {
-        if (step.status === "running") {
+      if (!stuck(run)) continue;
+      const step = run.steps[run.cursor];
+      if ((run.restarts ?? 0) >= 1) {
+        if (step?.status === "running") {
           step.status = "failed";
-          step.message = "Interrupted by a server restart.";
+          step.message = "Cut off by a server restart twice.";
         }
+        finish(run, "failed", "Interrupted by server restarts. Run it again.");
+        continue;
       }
-      finish(run, "failed", "Interrupted by a server restart. Run it again.");
+      run.restarts = (run.restarts ?? 0) + 1;
+      if (step?.status === "running") {
+        step.status = "pending";
+        step.message = "Starting again: a server restart cut this step off.";
+      }
+      ids.push(run.id);
     }
+    return ids;
   });
+  for (const id of resume) {
+    console.log(`[automations] picking up run ${id} after a restart cut it off`);
+    background(id);
+  }
+  return resume.length;
 }
 
 export { StepFailure };

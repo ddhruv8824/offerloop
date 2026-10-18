@@ -197,6 +197,8 @@ export interface RunStep {
   actionId: string;
   status: StepStatus;
   message?: string;
+  /** When the step last started running (to spot one a restart cut off). */
+  startedAt?: string;
 }
 
 /** A job a run found, small enough to store with the run. */
@@ -235,6 +237,8 @@ export interface WorkflowRun {
   startedAt: string;
   finishedAt?: string;
   steps: RunStep[];
+  /** Times the run was picked up again after a server restart cut a step off. */
+  restarts?: number;
   /** Index of the step to run next. */
   cursor: number;
   /** For workflows that start from "Use a job I paste": the link given when the run was started. */
