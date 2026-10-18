@@ -1,6 +1,7 @@
 "use client";
 
 import "./storage-rename";
+import { markChanged } from "./sync";
 import { useEffect, useState } from "react";
 import { isNoise, type Confidence, type EmailKind } from "./email-classifier";
 import { getCompany, JOBS, TRACKER } from "./sample-data";
@@ -136,6 +137,7 @@ function write(state: TrackerState) {
   } catch {
     // Storage blocked: changes last for this page only.
   }
+  markChanged("tracker");
   window.dispatchEvent(new Event(EVENT));
 }
 

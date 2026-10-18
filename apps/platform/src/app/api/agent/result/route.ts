@@ -1,5 +1,5 @@
 import { FINAL_STATUSES, report, type AgentReport } from "@/lib/apply-queue";
-import { isAgentRequest, notAgent } from "@/lib/server/agent-auth";
+import { agentUser, notAgent } from "@/lib/server/agent-auth";
 import { updateStore } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
@@ -8,12 +8,13 @@ const ACCEPTED: AgentReport[] = [...FINAL_STATUSES, "requeue"];
 
 /** The job agent reports what happened with one job it took. */
 export async function POST(req: Request) {
-  if (!(await isAgentRequest(req))) return notAgent();
+  const uid = await agentUser(req);
+  if (!uid) return notAgent();
   const body = (await req.json().catch(() => ({}))) as { id?: unknown; status?: unknown; message?: unknown };
   if (typeof body.id !== "string" || !ACCEPTED.includes(body.status as AgentReport)) {
     return Response.json({ error: "Send { id, status, message }." }, { status: 400 });
   }
-  const item = await updateStore((data) => {
+  const item = await updateStore(uid, (data) => {
     if (data.agent) data.agent.lastSeenAt = new Date().toISOString();
     return report(data.applyQueue, body.id as string, body.status as AgentReport, typeof body.message === "string" ? body.message : undefined);
   });

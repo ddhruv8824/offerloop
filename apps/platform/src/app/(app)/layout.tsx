@@ -1,5 +1,9 @@
 import { AppShell } from "@/components/AppShell";
+import { requirePageMember } from "@/lib/server/auth/gate";
 
-export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+export const dynamic = "force-dynamic";
+
+export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
+  const account = await requirePageMember("/dashboard");
+  return <AppShell account={account}>{children}</AppShell>;
 }

@@ -3,19 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Loader2, Menu, X } from "lucide-react";
+import { Loader2, LogOut, Menu, Shield, X } from "lucide-react";
 import { Logo } from "./Logo";
-import { Badge } from "./ui";
 import { TOOLS, TOOL_GROUPS } from "@/lib/tools";
 import { useProfile } from "@/lib/profile";
+import { startSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
+import type { Account } from "@/lib/server/auth/gate";
 
 /** Routes whose page is an embedded tool with its own full-height layout. */
 const FULL_BLEED_ROUTES = ["/resume"];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, account }: { children: React.ReactNode; account: Account }) {
   // The profile is optional: tools work without it and pages that need it ask inline.
   const { profile, ready } = useProfile();
+  // Bring this account's profile, tracker and DSA progress into this browser first.
+  const [synced, setSynced] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void startSync(account.id).finally(() => live && setSynced(true));
+    return () => {
+      live = false;
+    };
+  }, [account.id]);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -23,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const fullBleed = FULL_BLEED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 
-  if (!ready) {
+  if (!ready || !synced) {
     return (
       <div className="grid min-h-dvh place-items-center">
         <Loader2 className="size-5 animate-spin text-muted" aria-label="Loading" />
@@ -80,6 +90,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </Link>
   );
 
+  // Who's signed in, with Log out (and Admin for admins). Hidden on a one-person install.
+  const accountRow =
+    account.mode === "accounts" ? (
+      <div className="flex items-center gap-1 px-1 text-xs text-paper/50">
+        <span className="min-w-0 flex-1 truncate" title={account.email}>
+          {account.email}
+        </span>
+        {account.role === "admin" && (
+          <Link href="/admin" className="rounded p-1.5 hover:bg-paper/10 hover:text-paper" title="Admin: invites and members" aria-label="Admin">
+            <Shield className="size-3.5" />
+          </Link>
+        )}
+        <form method="post" action="/api/auth/logout">
+          <button type="submit" className="rounded p-1.5 hover:bg-paper/10 hover:text-paper" title="Log out" aria-label="Log out">
+            <LogOut className="size-3.5" />
+          </button>
+        </form>
+      </div>
+    ) : null;
+
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
       {/* Desktop sidebar */}
@@ -88,7 +118,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Logo dark href="/dashboard" />
         </div>
         <div className="flex-1">{nav}</div>
-        {profileCard}
+        <div className="space-y-2">
+          {profileCard}
+          {accountRow}
+        </div>
       </aside>
 
       {/* Mobile top bar */}
@@ -108,6 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-x-0 top-[60px] bottom-0 z-20 flex flex-col gap-6 overflow-y-auto bg-ink px-3 py-5 lg:hidden">
           {nav}
           {profileCard}
+          {accountRow}
         </div>
       )}
 
@@ -117,9 +151,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : (
         <main className="min-w-0 px-4 py-6 sm:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl animate-fade-in">{children}</div>
-          <footer className="mx-auto mt-12 flex max-w-6xl items-center gap-2 border-t border-line pt-4 text-xs text-muted">
-            <Badge>Sample data</Badge>
-            Jobs, companies and the tracker show sample data until each module&apos;s backend is connected.
+          <footer className="mx-auto mt-12 flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-4 text-xs text-muted">
+            <Link href="/docs" className="hover:text-text">
+              Docs
+            </Link>
+            <Link href="/privacy" className="hover:text-text">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-text">
+              Terms
+            </Link>
+            <span className="ml-auto">Offerloop · early access</span>
           </footer>
         </main>
       )}

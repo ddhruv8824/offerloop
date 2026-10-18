@@ -2,11 +2,12 @@
 
 import "./storage-rename";
 import { useCallback, useEffect, useState } from "react";
+import { markChanged } from "./sync";
 import type { CareerProfile } from "./types";
 
 /**
- * Frontend-only stand-in for the shared profile API: the profile lives in this
- * browser's localStorage until the backend exists.
+ * The career profile: kept in this browser's localStorage and mirrored to your account
+ * (see sync.ts), so it follows you to other devices.
  */
 const KEY = "offerloop.profile.v1";
 const EVENT = "offerloop:profile";
@@ -31,6 +32,7 @@ export function saveProfile(profile: CareerProfile) {
   } catch {
     // Storage blocked (private mode): the session continues without persistence.
   }
+  markChanged("profile");
   window.dispatchEvent(new Event(EVENT));
 }
 
@@ -38,6 +40,7 @@ export function clearProfile() {
   try {
     localStorage.removeItem(KEY);
   } catch {}
+  markChanged("profile");
   window.dispatchEvent(new Event(EVENT));
 }
 

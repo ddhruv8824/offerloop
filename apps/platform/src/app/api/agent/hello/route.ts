@@ -1,13 +1,14 @@
 import { DAILY_APPLY_LIMIT, reclaimStale, startedToday } from "@/lib/apply-queue";
-import { isAgentRequest, notAgent } from "@/lib/server/agent-auth";
+import { agentUser, notAgent } from "@/lib/server/agent-auth";
 import { updateStore } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
 
 /** The job agent checks in: is its key valid, and how much is waiting? */
 export async function GET(req: Request) {
-  if (!(await isAgentRequest(req))) return notAgent();
-  const status = await updateStore((data) => {
+  const uid = await agentUser(req);
+  if (!uid) return notAgent();
+  const status = await updateStore(uid, (data) => {
     if (data.agent) data.agent.lastSeenAt = new Date().toISOString();
     reclaimStale(data.applyQueue);
     return {
@@ -25,10 +26,11 @@ export async function GET(req: Request) {
  * agent has nobody watching its window.
  */
 export async function POST(req: Request) {
-  if (!(await isAgentRequest(req))) return notAgent();
+  const uid = await agentUser(req);
+  if (!uid) return notAgent();
   const body = (await req.json().catch(() => ({}))) as { problem?: unknown };
   const problem = typeof body.problem === "string" && body.problem.trim() ? body.problem.trim().slice(0, 300) : null;
-  await updateStore((data) => {
+  await updateStore(uid, (data) => {
     if (!data.agent) return;
     data.agent.lastSeenAt = new Date().toISOString();
     if (problem) data.agent.problem = { message: problem, at: data.agent.lastSeenAt };

@@ -173,3 +173,27 @@ export async function loadRunLog(workspace: string, runId: string): Promise<LogS
   if (!ID_RE.test(runId)) return null;
   return (await read<{ steps: LogStep[] }>(`${workspaceKey(workspace)}/runs/${runId}`))?.steps ?? null;
 }
+
+/**
+ * Copy a whole workspace (resume, profile, versions, chat, run logs) into another one — used
+ * once, when a browser's old workspace moves into its owner's account. Does nothing (false)
+ * when the source is empty or the target already has a resume.
+ */
+export async function copyWorkspace(from: string, to: string): Promise<boolean> {
+  const src = workspaceKey(from);
+  const dst = workspaceKey(to);
+  if (src === dst) return false;
+  const s = storage();
+  if (await s.get(`${dst}/current_resume`)) return false;
+  const resume = await s.get(`${src}/current_resume`);
+  if (!resume) return false;
+  for (const name of ["master_profile", "chat"]) {
+    const value = await s.get(`${src}/${name}`);
+    if (value) await s.set(`${dst}/${name}`, value);
+  }
+  for (const dir of ["versions", "runs"]) {
+    for (const entry of await s.list(`${src}/${dir}/`)) await s.set(`${dst}/${dir}/${entry.key.split("/").pop()}`, entry.value);
+  }
+  await s.set(`${dst}/current_resume`, resume); // last: its presence means "copied"
+  return true;
+}

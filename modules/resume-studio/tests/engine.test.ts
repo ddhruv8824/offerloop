@@ -526,3 +526,22 @@ test("study notes: tuned to what the candidate knows, diagram cleaned up", async
   assert.deepEqual(notes.key_concepts, [], "missing fields default instead of failing");
   assert.equal(cleanMermaid("mermaid\nsequenceDiagram\n  A->>B: hi"), "sequenceDiagram\n  A->>B: hi");
 });
+
+test("a pinned workspace ignores the one the browser asks for", async () => {
+  const pinned = (method: string, url: string, body?: unknown) => {
+    const req = new Request(`http://local/api/redline${url}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return handleRedlineRequest(req, new URL(req.url).pathname.split("/").slice(3).map(decodeURIComponent), { workspace: "user-a" });
+  };
+  // Saved under user-a, though the browser said "victim".
+  assert.equal((await pinned("POST", "/api/v1/tailor/resume/sample", { workspace: "victim" })).status, 200);
+  const mine = await (await pinned("GET", "/api/v1/tailor/workspace?workspace=victim")).json();
+  assert.ok(mine.current_resume, "reads its own workspace");
+  const victim = await (await call("GET", "/api/v1/tailor/workspace?workspace=victim")).json();
+  assert.equal(victim.current_resume, null, "the named workspace was never touched");
+  // Another workspace's run log isn't reachable.
+  assert.equal((await pinned("GET", "/api/v1/tailor/threads/victim:chat/history")).status, 404);
+});

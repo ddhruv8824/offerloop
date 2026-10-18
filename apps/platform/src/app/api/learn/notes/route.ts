@@ -3,28 +3,30 @@ import { LlmConfigError, resolveConfig, writeStudyNotes } from "@offerloop/resum
 import type { StudyNotes } from "@/lib/learn";
 import { readStore, readStudyNotes, saveStudyNotes, updateStore } from "@/lib/server/store";
 
+import { memberRoute } from "@/lib/server/auth/session";
+
 export const dynamic = "force-dynamic";
 // Writing notes is one model call; give slow providers room.
 export const maxDuration = 120;
 
 /** Saved study notes for one tool: ?key=… (null when none yet). */
-export async function GET(req: NextRequest) {
+export const GET = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const key = req.nextUrl.searchParams.get("key") ?? "";
   try {
-    return NextResponse.json({ notes: await readStudyNotes<StudyNotes>(key) });
+    return NextResponse.json({ notes: await readStudyNotes<StudyNotes>(user.id, key) });
   } catch {
     return NextResponse.json({ error: "Unknown tool." }, { status: 400 });
   }
-}
+});
 
 /**
  * Write (or rewrite) study notes for one tool on the Learn list: { key, knownSkills? }.
  * Uses the AI provider and key from Resume Studio's AI settings (X-LLM-* headers), or a
  * server key when one is set.
  */
-export async function POST(req: NextRequest) {
+export const POST = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const body = (await req.json().catch(() => ({}))) as { key?: unknown; knownSkills?: unknown };
-  const data = await readStore();
+  const data = await readStore(user.id);
   const item = data.learning.find((i) => i.key === body.key);
   if (!item) return NextResponse.json({ error: "That tool isn't on your Learn list." }, { status: 404 });
 
@@ -59,8 +61,8 @@ export async function POST(req: NextRequest) {
       similarTo: written.similar_to,
       writtenAt: new Date().toISOString(),
     };
-    await saveStudyNotes(item.key, notes);
-    await updateStore((d) => {
+    await saveStudyNotes(user.id, item.key, notes);
+    await updateStore(user.id, (d) => {
       const it = d.learning.find((i) => i.key === item.key);
       if (it) {
         it.notesAt = notes.writtenAt;
@@ -71,4 +73,4 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Couldn't write the notes. Try again." }, { status: 502 });
   }
-}
+});

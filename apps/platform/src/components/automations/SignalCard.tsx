@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, ExternalLink, Loader2, MessageCircle, RotateCw, Send, X } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
 
-const GUIDE_URL = "https://github.com/ddhruv8824/offerloop/blob/main/deploy/RENDER.md#signal-alerts-optional";
+const GUIDE_URL = "/docs/signal";
 
 interface SignalResult {
   ok: boolean;
@@ -23,6 +23,9 @@ const ago = (iso: string) => {
 /** Signal alerts: whether they're set up, how the last message went, a test and a resend button. */
 export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [form, setForm] = useState({ phone: "", apikey: "" });
+  const [saving, setSaving] = useState(false);
   const [last, setLast] = useState<SignalResult | null>(null);
   const [busy, setBusy] = useState<"test" | "resend" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +33,31 @@ export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
   const load = useCallback(() => {
     fetch("/api/automations/signal")
       .then((r) => r.json())
-      .then((d: { configured?: boolean; last?: SignalResult | null }) => {
+      .then((d: { configured?: boolean; phone?: string | null; last?: SignalResult | null }) => {
         setConfigured(Boolean(d.configured));
+        setPhone(d.phone ?? null);
         setLast(d.last ?? null);
       })
       .catch(() => setConfigured(false));
   }, []);
   useEffect(load, [load]);
+
+  /** Save ({ phone, apikey }) or remove ({ remove: true }) this person's CallMeBot details. */
+  const saveSettings = async (body: object) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/automations/signal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) setError(data.error ?? "Couldn't save that.");
+      else {
+        setForm({ phone: "", apikey: "" });
+        load();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const send = async (what: "test" | "resend") => {
     setBusy(what);
@@ -84,12 +105,54 @@ export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
       />
       <div className="space-y-2 px-5 py-4 text-sm">
         {configured === false && (
-          <p className="text-muted">
-            Message CallMeBot&apos;s Signal bot once to get a key, then add <code className="font-mono text-xs">SIGNAL_PHONE</code> and{" "}
-            <code className="font-mono text-xs">SIGNAL_CALLMEBOT_KEY</code> in Render → Environment.{" "}
-            <a href={GUIDE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-coral-strong hover:underline">
-              How to set it up <ExternalLink className="size-3" aria-hidden />
-            </a>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveSettings(form);
+            }}
+          >
+            <ol className="list-decimal space-y-1 pl-5 text-muted">
+              <li>
+                On your phone, open callmebot.com → <b>Signal</b>, save the bot&apos;s number, and send it: <i>I allow callmebot to send me messages</i>
+              </li>
+              <li>
+                It replies with a link like <code className="font-mono text-xs">send.php?phone=c242bb7d-…&amp;apikey=123456</code>. Paste the two values here.
+              </li>
+            </ol>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="phone= value, e.g. c242bb7d-…"
+                aria-label="CallMeBot phone value"
+                className="flex-1 rounded-md border border-line bg-paper px-3 py-2 font-mono text-xs"
+              />
+              <input
+                value={form.apikey}
+                onChange={(e) => setForm({ ...form, apikey: e.target.value })}
+                placeholder="apikey= value"
+                aria-label="CallMeBot API key"
+                className="w-full rounded-md border border-line bg-paper px-3 py-2 font-mono text-xs sm:w-36"
+              />
+              <Button type="submit" className="px-3 py-1.5 text-xs" disabled={saving || !form.phone.trim() || !form.apikey.trim()}>
+                {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Save
+              </Button>
+            </div>
+            <p className="text-xs text-faint">
+              The key is stored encrypted. Messages carry job titles and links, never your keys or passwords.{" "}
+              <a href={GUIDE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-coral-strong hover:underline">
+                Guide <ExternalLink className="size-3" aria-hidden />
+              </a>
+            </p>
+          </form>
+        )}
+        {configured && phone && (
+          <p className="text-xs text-muted">
+            Sending to CallMeBot account <span className="font-mono">{phone}</span> ·{" "}
+            <button type="button" className="font-semibold text-coral-strong hover:underline" disabled={saving} onClick={() => confirm("Remove your Signal alerts settings?") && void saveSettings({ remove: true })}>
+              Remove
+            </button>
           </p>
         )}
         {configured && last && (

@@ -26,6 +26,8 @@ export interface MadeLinks {
 }
 
 const hash = (token: string) => createHash("sha256").update(token, "utf8").digest("hex");
+/** The stored form of a link's secret (also its key in the link index). */
+export const linkHash = hash;
 const newToken = () => randomBytes(18).toString("base64url");
 
 /** Jobs best first: the order the message numbers them in. */

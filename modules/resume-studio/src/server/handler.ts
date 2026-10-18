@@ -283,9 +283,46 @@ async function route(req: Request, path: string[]): Promise<Response> {
   throw new HttpError(404, "Not found.");
 }
 
-/** Handle one Redline API request. `path` is the URL path below the mount point, split on "/". */
-export async function handleRedlineRequest(req: Request, path: string[]): Promise<Response> {
+/**
+ * Pin a request to one workspace, whatever the browser asked for: rewrite the `workspace`
+ * query parameter, JSON field or form field, and refuse run logs of other workspaces. This is
+ * how a host with accounts gives each person their own workspace.
+ */
+async function pinWorkspace(req: Request, path: string[], workspace: string): Promise<Request> {
+  const threadId = path[0] === "api" && path[2] === "tailor" && path[3] === "threads" ? path[4] : undefined;
+  if (threadId !== undefined && THREAD_RE.exec(threadId)?.[1] !== workspace) throw new HttpError(404, "No log for this thread.");
+
+  const url = new URL(req.url);
+  if (url.searchParams.has("workspace") || req.method === "GET") url.searchParams.set("workspace", workspace);
+  if (req.method === "GET" || req.method === "HEAD") return new Request(url, { method: req.method, headers: req.headers, signal: req.signal });
+
+  const type = req.headers.get("content-type") ?? "";
+  const headers = new Headers(req.headers);
+  headers.delete("content-length");
+  if (type.includes("multipart/form-data")) {
+    const form = await req.formData();
+    form.set("workspace", workspace);
+    headers.delete("content-type"); // the new body sets its own boundary
+    return new Request(url, { method: req.method, headers, body: form, signal: req.signal });
+  }
+  const text = await req.text();
+  let body: unknown = {};
   try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    throw new HttpError(400, "Expected a JSON body.");
+  }
+  if (body && typeof body === "object" && !Array.isArray(body)) (body as Record<string, unknown>).workspace = workspace;
+  return new Request(url, { method: req.method, headers, body: JSON.stringify(body), signal: req.signal });
+}
+
+/**
+ * Handle one Redline API request. `path` is the URL path below the mount point, split on "/".
+ * With `workspace`, every request is pinned to that workspace (see pinWorkspace).
+ */
+export async function handleRedlineRequest(req: Request, path: string[], { workspace }: { workspace?: string } = {}): Promise<Response> {
+  try {
+    if (workspace) req = await pinWorkspace(req, path, workspace);
     return await route(req, path);
   } catch (err) {
     if (err instanceof HttpError) return json({ detail: err.message }, err.status);

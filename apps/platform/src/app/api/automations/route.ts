@@ -5,11 +5,13 @@ import { parseProfile } from "@/lib/server/jobs/request";
 import { readStore, updateStore } from "@/lib/server/store";
 import { normaliseWorkflow } from "@/lib/workflow-defs";
 
+import { memberRoute } from "@/lib/server/auth/session";
+
 export const dynamic = "force-dynamic";
 
 /** Saved workflows (with when each runs next) and recent runs. */
-export async function GET() {
-  const data = await readStore();
+export const GET = memberRoute(async (_req, _ctx, user) => {
+  const data = await readStore(user.id);
   return NextResponse.json({
     workflows: data.workflows.map((wf) => ({ ...normaliseWorkflow(wf), nextRunAt: nextRunAt(wf) })),
     runs: data.runs.slice(0, 30),
@@ -21,16 +23,16 @@ export async function GET() {
       : { connected: false },
     scheduler: schedulerStatus(),
   });
-}
+});
 
 /**
  * Create or update a workflow. The browser also sends its timezone (so "09:00" means the
  * user's 09:00) and the current career profile (what scheduled job searches will use).
  */
-export async function POST(req: NextRequest) {
+export const POST = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const body = (await req.json().catch(() => ({}))) as { workflow?: unknown; timezone?: unknown; profile?: unknown };
   const profile = body.profile === undefined ? undefined : parseProfile(body.profile);
-  const saved = await updateStore((data) => {
+  const saved = await updateStore(user.id, (data) => {
     if (profile) data.profile = profile;
     if (body.workflow === undefined) return null;
     const id = (body.workflow as { id?: unknown })?.id;
@@ -44,13 +46,13 @@ export async function POST(req: NextRequest) {
   });
   if (saved === undefined) return NextResponse.json({ error: "That workflow couldn't be saved." }, { status: 400 });
   return NextResponse.json({ workflow: saved ? { ...saved, nextRunAt: nextRunAt(saved) } : null });
-}
+});
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const id = req.nextUrl.searchParams.get("id");
-  await updateStore((data) => {
+  await updateStore(user.id, (data) => {
     data.workflows = data.workflows.filter((w) => w.id !== id);
     if (id) delete data.seenJobs[id];
   });
   return NextResponse.json({ ok: true });
-}
+});

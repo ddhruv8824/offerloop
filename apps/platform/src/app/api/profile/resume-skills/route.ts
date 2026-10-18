@@ -3,6 +3,8 @@ import { extractText } from "@offerloop/resume-studio/server";
 import { resumeFacts } from "@/lib/resume-facts";
 import { skillsInText } from "@/lib/skills";
 
+import { memberRoute } from "@/lib/server/auth/session";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
  * role and years of experience (lib/resume-facts.ts). No AI involved, and the file isn't
  * stored — it's read once and dropped.
  */
-export async function POST(req: Request) {
+export const POST = memberRoute(async (req, _ctx, user) => {
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES + 64 * 1024) {
     return NextResponse.json({ error: "That file is larger than 10 MB." }, { status: 413 });
   }
@@ -38,4 +40,4 @@ export async function POST(req: Request) {
     );
   }
   return NextResponse.json({ skills: skillsInText(text), facts: resumeFacts(text) });
-}
+});

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Check, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button, Card } from "@/components/ui";
-import { findApprovalLink, linkJobIds } from "@/lib/server/approval-links";
+import { linkJobIds } from "@/lib/server/approval-links";
+import { lookupApprovalLink } from "@/lib/server/approval-lookup";
 import { readStore } from "@/lib/server/store";
 
 export const dynamic = "force-dynamic";
@@ -39,9 +40,9 @@ export default async function ApprovalLinkPage({
     );
   }
 
-  const data = await readStore();
-  const link = findApprovalLink(data.approvalLinks, token);
-  const run = link && data.runs.find((r) => r.id === link.runId);
+  const found = await lookupApprovalLink(token);
+  const link = found?.link;
+  const run = found && link ? (await readStore(found.uid)).runs.find((r) => r.id === link.runId) : undefined;
   if (!link || !run || run.status !== "waiting_approval") {
     return (
       <Shell>

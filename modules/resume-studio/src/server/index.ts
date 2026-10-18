@@ -9,3 +9,5 @@ export { extractText } from "./extract";
 export { writeStudyNotes, type StudyNotesOutput } from "./study-notes";
 /** Resolve the AI provider/model/key from a request's X-LLM-* headers (or a server key). */
 export { resolveConfig, LlmConfigError, type LlmConfig } from "./models";
+/** Copy one workspace into another (moving a browser's workspace into its owner's account). */
+export { copyWorkspace } from "./store";

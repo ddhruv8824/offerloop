@@ -3,10 +3,12 @@ import { scoreJob } from "@/lib/jobs";
 import { ImportError, importJob } from "@/lib/server/jobs/import";
 import { parseProfile } from "@/lib/server/jobs/request";
 
+import { memberRoute } from "@/lib/server/auth/session";
+
 export const dynamic = "force-dynamic";
 
 /** "Paste a link": read one job posting and score it for this profile. */
-export async function POST(req: NextRequest) {
+export const POST = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const body = (await req.json().catch(() => ({}))) as { url?: unknown; profile?: unknown };
   const profile = parseProfile(body.profile);
   if (!profile) return NextResponse.json({ error: "Add a target role to your profile first." }, { status: 400 });
@@ -21,4 +23,4 @@ export async function POST(req: NextRequest) {
     const detail = process.env.NODE_ENV !== "production" && err instanceof Error ? err.stack?.split(/\r?\n/).slice(0, 4).join(" | ") : undefined;
     return NextResponse.json({ error: "Couldn't read that link.", detail }, { status: 502 });
   }
-}
+});

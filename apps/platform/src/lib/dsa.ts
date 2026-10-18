@@ -1,6 +1,7 @@
 "use client";
 
 import "./storage-rename";
+import { markChanged } from "./sync";
 import { useEffect, useState } from "react";
 
 /**
@@ -221,6 +222,7 @@ function update(fn: (s: DsaState) => DsaState) {
   } catch {
     // storage blocked
   }
+  markChanged("dsa");
   window.dispatchEvent(new Event(EVENT));
 }
 

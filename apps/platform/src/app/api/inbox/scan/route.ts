@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { classifyAll, SAMPLE_EMAILS, scanGmail, TOKEN_COOKIE, unseal } from "@/lib/server/inbox";
 
+import { memberRoute } from "@/lib/server/auth/session";
+
 export const dynamic = "force-dynamic";
 
 interface ScanBody {
@@ -17,7 +19,7 @@ const strings = (v: unknown, max: number) =>
  * Look for application updates in the connected inbox.
  * Returns only classifications + sender/subject/date — never email bodies.
  */
-export async function POST(req: NextRequest) {
+export const POST = memberRoute<NextRequest>(async (req, _ctx, user) => {
   const body = (await req.json().catch(() => ({}))) as ScanBody;
   const companies = strings(body.companies, 50);
   const skip = new Set(strings(body.skip, 2000));
@@ -43,4 +45,4 @@ export async function POST(req: NextRequest) {
       { status: expired ? 401 : 502 },
     );
   }
-}
+});

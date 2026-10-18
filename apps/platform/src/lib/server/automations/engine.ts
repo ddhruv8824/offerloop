@@ -8,14 +8,14 @@ import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
 import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
 import { approvalMessage, shortApprovalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
-import { makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
-import { sendAndRecord, signalConfigured, type SignalResult } from "@/lib/server/notify/signal";
+import { LINK_TTL_MS, linkHash, makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
+import { sendAndRecord, signalCreds, type SignalCreds, type SignalResult } from "@/lib/server/notify/signal";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
 import { salaryMarket } from "../jobs/market";
 import { searchJobs } from "../jobs/search";
-import { readStore, updateStore, type StoreData } from "../store";
+import { indexSet, readStore, updateStore, type StoreData } from "../store";
 
 interface StepOutcome {
   status: "done" | "skipped" | "waiting";
@@ -283,20 +283,26 @@ function withTimeLimit<T>(work: Promise<T>, ms: number): Promise<T> {
 const g = globalThis as unknown as { __offerloopActiveRuns?: Set<string> };
 const activeRuns = (g.__offerloopActiveRuns ??= new Set<string>());
 
+interface Waiting {
+  run: WorkflowRun;
+  links?: MadeLinks;
+  creds: SignalCreds | null;
+}
+
 /** Run steps from the cursor until the run finishes, fails, or has to wait for approval. */
-async function advance(runId: string): Promise<void> {
+async function advance(uid: string, runId: string): Promise<void> {
   activeRuns.add(runId);
   try {
-    await advanceSteps(runId);
+    await advanceSteps(uid, runId);
   } finally {
     activeRuns.delete(runId);
   }
 }
 
-async function advanceSteps(runId: string): Promise<void> {
+async function advanceSteps(uid: string, runId: string): Promise<void> {
   for (;;) {
     // 1. Claim the next step.
-    const claim = await updateStore((data) => {
+    const claim = await updateStore(uid, (data) => {
       const run = data.runs.find((r) => r.id === runId);
       if (!run || run.status !== "running") return null;
       const state = run.steps[run.cursor];
@@ -333,8 +339,8 @@ async function advanceSteps(runId: string): Promise<void> {
     }
 
     // 3. Record the result — unless the run was cancelled or replaced while the step worked.
-    let nowWaiting: { run: WorkflowRun; links?: MadeLinks } | null = null;
-    const more = await updateStore((data) => {
+    let nowWaiting: Waiting | null = null;
+    const more = await updateStore(uid, (data) => {
       const run = data.runs.find((r) => r.id === runId);
       if (!run || run.status !== "running" || run.cursor !== claim.cursor) return false;
       const state = run.steps[run.cursor];
@@ -350,13 +356,14 @@ async function advanceSteps(runId: string): Promise<void> {
       if (outcome.status === "waiting") {
         run.status = "waiting_approval";
         // One-tap approve links go in the Signal message, so only make them when it's set up.
+        const creds = signalCreds(data);
         let links: MadeLinks | undefined;
-        if (signalConfigured() && run.jobs.length) {
+        if (creds && run.jobs.length) {
           const made = makeApprovalLinks(data.approvalLinks, run);
           data.approvalLinks = made.links;
           links = made.made;
         }
-        nowWaiting = { run: structuredClone(run), links };
+        nowWaiting = { run: structuredClone(run), links, creds };
         return false;
       }
       run.cursor++;
@@ -364,56 +371,71 @@ async function advanceSteps(runId: string): Promise<void> {
     });
     // Waiting for you: say so on Signal too (when it's set up), so you can approve from your phone.
     // (Set inside the callback above, which TypeScript can't follow.)
-    const waiting = nowWaiting as { run: WorkflowRun; links?: MadeLinks } | null;
-    if (waiting) notifyWaiting(waiting.run, waiting.links);
+    const waiting = nowWaiting as Waiting | null;
+    if (waiting?.creds) notifyWaiting(uid, waiting.creds, waiting.run, waiting.links);
     if (!more) return;
   }
 }
 
 /** Send a waiting run's Signal message again, with fresh links (the old ones stop working). */
-export async function resendApproval(runId: string): Promise<SignalResult> {
-  const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
-  const made = await updateStore((data) => {
+export async function resendApproval(uid: string, runId: string): Promise<SignalResult> {
+  const site = siteUrl();
+  const made = await updateStore(uid, (data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (!run || run.status !== "waiting_approval") throw new StepFailure("That run isn't waiting for approval any more.");
+    const creds = signalCreds(data);
+    if (!creds) throw new StepFailure("Signal isn't set up yet: add your CallMeBot details first.");
     const { links, made } = makeApprovalLinks(data.approvalLinks, run);
     data.approvalLinks = links;
-    return { run: structuredClone(run), links: made };
+    return { run: structuredClone(run), links: made, creds };
   });
   if (!site) throw new StepFailure("The site's address isn't known (set PUBLIC_URL).");
-  return sendApproval(made.run, site, made.links);
+  await indexLinks(uid, made.links);
+  return sendApproval(uid, made.creds, made.run, site, made.links);
+}
+
+const siteUrl = () => (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
+
+/** Record which person each link belongs to, so /a/<token> can find their run. */
+async function indexLinks(uid: string, links: MadeLinks) {
+  const expiresAt = new Date(Date.now() + LINK_TTL_MS).toISOString();
+  for (const token of [links.all, links.skip, ...links.single.map((s) => s.token)]) {
+    await indexSet("approval-links", linkHash(token), { uid, expiresAt });
+  }
 }
 
 /**
  * Send the approval message. CallMeBot sometimes can't deliver a long, link-heavy message
  * ("Internal Signal Error") while short ones go through — then send the short version.
  */
-async function sendApproval(run: WorkflowRun, site: string, links?: MadeLinks): Promise<SignalResult> {
-  const full = await sendAndRecord("approval", approvalMessage(run, site, links));
+async function sendApproval(uid: string, creds: SignalCreds, run: WorkflowRun, site: string, links?: MadeLinks): Promise<SignalResult> {
+  const full = await sendAndRecord(uid, creds, "approval", approvalMessage(run, site, links));
   if (full.ok) return full;
-  const short = await sendAndRecord("approval", shortApprovalMessage(run, site, links));
+  const short = await sendAndRecord(uid, creds, "approval", shortApprovalMessage(run, site, links));
   return short.ok ? { ...short, detail: `Sent the short version (the full one failed). ${short.detail}` } : short;
 }
 
-function notifyWaiting(run: WorkflowRun, links?: MadeLinks) {
-  if (!signalConfigured() || !run.jobs.length) return;
-  const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
+function notifyWaiting(uid: string, creds: SignalCreds, run: WorkflowRun, links?: MadeLinks) {
+  if (!run.jobs.length) return;
+  const site = siteUrl();
   if (!site) {
     // Without the site's address the links can't be built; say so where it's visible.
-    void updateStore((d) => {
+    void updateStore(uid, (d) => {
       d.signalLast = { ok: false, at: new Date().toISOString(), kind: "approval", detail: "Not sent: the site's address isn't known. Add PUBLIC_URL (e.g. https://offerloop-xxxx.onrender.com) in Render → Environment." };
     }).catch(() => {});
     return;
   }
-  console.log(`[signal] sending the approval message for "${run.workflowName}" (${run.jobs.length} jobs)`);
-  void sendApproval(run, site, links);
+  void (async () => {
+    if (links) await indexLinks(uid, links);
+    await sendApproval(uid, creds, run, site, links);
+  })().catch((err) => console.error("[signal] approval message failed:", err));
 }
 
-const background = (runId: string) => void advance(runId).catch((err) => console.error("[automations] run crashed:", err));
+const background = (uid: string, runId: string) => void advance(uid, runId).catch((err) => console.error("[automations] run crashed:", err));
 
 /** Start a run and return straight away; the steps continue in the background. */
-export async function startRun(workflowId: string, startedBy: WorkflowRun["startedBy"], input: { jobUrl?: string } = {}): Promise<WorkflowRun> {
-  const run = await updateStore((data) => {
+export async function startRun(uid: string, workflowId: string, startedBy: WorkflowRun["startedBy"], input: { jobUrl?: string } = {}): Promise<WorkflowRun> {
+  const run = await updateStore(uid, (data) => {
     const workflow = data.workflows.find((w) => w.id === workflowId);
     if (!workflow) throw new StepFailure("That workflow doesn't exist any more.");
     if (!workflow.steps.length) throw new StepFailure("This workflow has no steps yet.");
@@ -436,13 +458,13 @@ export async function startRun(workflowId: string, startedBy: WorkflowRun["start
     data.runs.unshift(created);
     return created;
   });
-  background(run.id);
+  background(uid, run.id);
   return run;
 }
 
 /** The user approved some (or none) of the jobs: continue with those. */
-export async function approveRun(runId: string, jobIds: string[]): Promise<void> {
-  await updateStore((data) => {
+export async function approveRun(uid: string, runId: string, jobIds: string[]): Promise<void> {
+  await updateStore(uid, (data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (!run || run.status !== "waiting_approval") throw new StepFailure("That run isn't waiting for approval any more.");
     const approved = run.jobs.filter((j) => jobIds.includes(j.id));
@@ -458,27 +480,27 @@ export async function approveRun(runId: string, jobIds: string[]): Promise<void>
     run.cursor++;
     run.status = "running";
   });
-  background(runId);
+  background(uid, runId);
 }
 
-export async function cancelRun(runId: string): Promise<void> {
-  await updateStore((data) => {
+export async function cancelRun(uid: string, runId: string): Promise<void> {
+  await updateStore(uid, (data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (run && (run.status === "running" || run.status === "waiting_approval")) finish(run, "cancelled", "Cancelled by you.");
   });
 }
 
 /** The browser has added a run's jobs to the Tracker. */
-export async function markTrackerApplied(runId: string): Promise<void> {
-  await updateStore((data) => {
+export async function markTrackerApplied(uid: string, runId: string): Promise<void> {
+  await updateStore(uid, (data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (run) run.trackerApplied = true;
   });
 }
 
 /** The browser has put these Hirist apply results on the Tracker. */
-export async function markApplySynced(itemIds: string[]): Promise<void> {
-  await updateStore((data) => {
+export async function markApplySynced(uid: string, itemIds: string[]): Promise<void> {
+  await updateStore(uid, (data) => {
     for (const item of data.applyQueue) if (itemIds.includes(item.id)) item.trackerSynced = true;
   });
 }
@@ -493,14 +515,14 @@ export const STUCK_AFTER_MS = 7 * 60_000;
  * started again, once; cut off a second time, it fails with a message instead of spinning forever.
  * Called on every scheduler tick.
  */
-export async function recoverStuckRuns(now = Date.now()): Promise<number> {
+export async function recoverStuckRuns(uid: string, now = Date.now()): Promise<number> {
   const stuck = (run: WorkflowRun) => {
     if (run.status !== "running" || activeRuns.has(run.id)) return false;
     const since = Date.parse(run.steps[run.cursor]?.startedAt ?? run.startedAt);
     return Number.isFinite(since) && now - since > STUCK_AFTER_MS;
   };
-  if (!(await readStore()).runs.some(stuck)) return 0;
-  const resume = await updateStore((d) => {
+  if (!(await readStore(uid)).runs.some(stuck)) return 0;
+  const resume = await updateStore(uid, (d) => {
     const ids: string[] = [];
     for (const run of d.runs) {
       if (!stuck(run)) continue;
@@ -524,7 +546,7 @@ export async function recoverStuckRuns(now = Date.now()): Promise<number> {
   });
   for (const id of resume) {
     console.log(`[automations] picking up run ${id} after a restart cut it off`);
-    background(id);
+    background(uid, id);
   }
   return resume.length;
 }

@@ -6,6 +6,7 @@
 import { dueSlot, isValidTimeZone, nextOccurrence, type Schedule } from "@/lib/schedule";
 import type { Workflow } from "@/lib/workflow-defs";
 import { readStore, updateStore } from "../store";
+import { allUserIds } from "../users";
 import { recoverStuckRuns, startRun } from "./engine";
 
 const TICK_MS = 30_000;
@@ -28,33 +29,12 @@ export async function tick(now = Date.now()): Promise<{ started: string[] }> {
   state.ticking = true;
   const started: string[] = [];
   try {
-    // Runs a restart cut off mid-step: start the step again (see recoverStuckRuns).
-    await recoverStuckRuns(now).catch((err) => console.error("[automations] couldn't check for stuck runs:", err));
-    const { workflows } = await readStore();
-    for (const wf of workflows) {
-      if (!wf.enabled || wf.trigger.kind === "manual" || !wf.steps.length) continue;
-      const slot = dueSlot(wf.trigger as Schedule, {
-        now,
-        timeZone: timeZoneOf(wf),
-        savedAt: Date.parse(wf.updatedAt) || 0,
-        lastScheduledFor: wf.lastScheduledFor ? Date.parse(wf.lastScheduledFor) : undefined,
-      });
-      if (slot === null) continue;
-      // Record the slot first: if the run then fails to start, we don't retry it every 30 seconds.
-      const claimed = await updateStore((data) => {
-        const current = data.workflows.find((w) => w.id === wf.id);
-        if (!current || !current.enabled) return false;
-        if (current.lastScheduledFor && Date.parse(current.lastScheduledFor) >= slot) return false;
-        current.lastScheduledFor = new Date(slot).toISOString();
-        return true;
-      });
-      if (!claimed) continue;
+    for (const uid of await allUserIds()) {
+      // One person's problem (damaged data, say) must not stop everyone else's workflows.
       try {
-        await startRun(wf.id, "schedule");
-        started.push(wf.name);
-        console.log(`[automations] started "${wf.name}" for its ${new Date(slot).toISOString()} slot`);
+        started.push(...(await tickUser(uid, now)));
       } catch (err) {
-        console.error(`[automations] couldn't start "${wf.name}":`, err instanceof Error ? err.message : err);
+        console.error(`[automations] tick for ${uid} failed:`, err instanceof Error ? err.message : err);
       }
     }
   } catch (err) {
@@ -64,6 +44,40 @@ export async function tick(now = Date.now()): Promise<{ started: string[] }> {
     state.lastTickAt = new Date().toISOString();
   }
   return { started };
+}
+
+/** One person: pick up runs a restart cut off, then start whatever is due. */
+async function tickUser(uid: string, now: number): Promise<string[]> {
+  const started: string[] = [];
+  await recoverStuckRuns(uid, now).catch((err) => console.error("[automations] couldn't check for stuck runs:", err));
+  const { workflows } = await readStore(uid);
+  for (const wf of workflows) {
+    if (!wf.enabled || wf.trigger.kind === "manual" || !wf.steps.length) continue;
+    const slot = dueSlot(wf.trigger as Schedule, {
+      now,
+      timeZone: timeZoneOf(wf),
+      savedAt: Date.parse(wf.updatedAt) || 0,
+      lastScheduledFor: wf.lastScheduledFor ? Date.parse(wf.lastScheduledFor) : undefined,
+    });
+    if (slot === null) continue;
+    // Record the slot first: if the run then fails to start, we don't retry it every 30 seconds.
+    const claimed = await updateStore(uid, (data) => {
+      const current = data.workflows.find((w) => w.id === wf.id);
+      if (!current || !current.enabled) return false;
+      if (current.lastScheduledFor && Date.parse(current.lastScheduledFor) >= slot) return false;
+      current.lastScheduledFor = new Date(slot).toISOString();
+      return true;
+    });
+    if (!claimed) continue;
+    try {
+      await startRun(uid, wf.id, "schedule");
+      started.push(wf.name);
+      console.log(`[automations] started "${wf.name}" (${uid}) for its ${new Date(slot).toISOString()} slot`);
+    } catch (err) {
+      console.error(`[automations] couldn't start "${wf.name}" (${uid}):`, err instanceof Error ? err.message : err);
+    }
+  }
+  return started;
 }
 
 export function startScheduler() {
