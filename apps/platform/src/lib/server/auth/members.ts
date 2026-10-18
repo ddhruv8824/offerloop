@@ -74,6 +74,17 @@ function withInvites<T>(change: (codes: InviteCode[]) => T): Promise<T> {
   return next;
 }
 
+/** Whether a code would work right now (doesn't use it). Returns why not, or null. */
+export async function checkInvite(raw: string): Promise<string | null> {
+  const code = normalCode(raw);
+  if (!code) return "Enter your invite code.";
+  if (envCodes().includes(code)) return null;
+  const found = (await listInvites()).find((c) => c.code === code);
+  if (!found || found.disabled) return "That invite code isn't valid.";
+  if (found.maxUses > 0 && found.uses >= found.maxUses) return "That invite code has been used up.";
+  return null;
+}
+
 /** Use one invite code. Returns why not, or null when it's been counted. */
 async function useCode(raw: string): Promise<string | null> {
   const code = normalCode(raw);

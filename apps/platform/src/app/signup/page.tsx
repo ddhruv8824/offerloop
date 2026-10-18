@@ -28,7 +28,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       <form method="post" action="/api/auth/signup" className="space-y-3">
         <input type="email" name="email" required autoComplete="email" defaultValue={email} aria-label="Email" placeholder="Email" className={inputClass} />
         <input type="password" name="password" required minLength={8} autoComplete="new-password" aria-label="Password" placeholder="Password (8+ characters)" className={inputClass} />
-        {invite && <input name="code" required defaultValue={code} autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase`} />}
+        {invite && <input name="code" required defaultValue={code} autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase placeholder:font-sans placeholder:normal-case`} />}
         <Button type="submit" className="w-full">
           Create account
         </Button>

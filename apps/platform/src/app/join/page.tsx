@@ -31,7 +31,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
     >
       <Notice error={error} />
       <form method="post" action="/api/auth/join" className="space-y-3">
-        <input name="code" required autoFocus autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase`} />
+        <input name="code" required autoFocus autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase placeholder:font-sans placeholder:normal-case`} />
         <Button type="submit" className="w-full">
           Continue
         </Button>

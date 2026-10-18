@@ -51,14 +51,19 @@ first start.
 2. **New → Blueprint** → connect **ddhruv8824/offerloop**. Render reads `render.yaml` and
    shows one free web service, **offerloop**.
 3. Fill in:
-   - **APP_PASSWORD**: your site password (you make it up — long, not used anywhere else).
    - **DATABASE_URL**: the line from step 1.
+   - **ADMIN_EMAILS**: your email.
+   - **SUPABASE_URL** and **SUPABASE_ANON_KEY**: Supabase → **Connect** → **App Frameworks** →
+     Next.js (then do the sign-in settings in
+     [Running Offerloop](../apps/platform/content/docs/running-offerloop.md#turn-on-accounts)).
+     Leave them empty for a private one-person install (then set `APP_PASSWORD` instead).
    - Leave the others empty for now.
 4. **Apply**. The first build takes about 5–10 minutes (**Logs** tab).
 5. When it's live, copy its address, e.g. `https://offerloop-xxxx.onrender.com`.
 6. Check it's using the database: open `https://offerloop-xxxx.onrender.com/api/health`.
    It should say `"storage":"database"`. (`"files"` means `DATABASE_URL` is missing.)
-7. Open the site, enter your password — you're in.
+7. Open the site and sign up with your admin email — you're in. Invite others from the
+   **Admin** page.
 
 **If Render asks for a card** or the Blueprint fails, create the service by hand instead:
 **New → Web Service** → the repo → Language **Docker**, Region **Singapore**, Instance type
@@ -66,8 +71,9 @@ first start.
 
 | Key | Value |
 |---|---|
-| `APP_PASSWORD` | your site password |
 | `DATABASE_URL` | the line from step 1 |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | from Supabase → Connect (accounts) |
+| `ADMIN_EMAILS` | your email |
 | `INBOX_SECRET` | any long random text (e.g. 40 letters and digits) |
 | `CRON_SECRET` | another long random text, different from the one above |
 | `NODE_OPTIONS` | `--max-old-space-size=384` |
@@ -123,28 +129,8 @@ first start.
 - **Storage**: Supabase's free database (about 500 MB) is far more than Offerloop needs.
 - Free-plan limits change — check Render's and Supabase's pricing pages if something stops.
 
-## Signal alerts (optional)
+## Signal alerts
 
-Get a Signal message when a workflow stops at **Wait for my approval**, with the best jobs and
-a link to approve. It uses [CallMeBot](https://www.callmebot.com)'s free Signal relay, for personal use.
-
-1. On your phone, open CallMeBot's Signal page (callmebot.com → **Signal**) and save the bot's
-   number it shows to your contacts.
-2. In Signal, send that contact: `I allow callmebot to send me messages`
-3. Within a couple of minutes the bot replies with your **API key** and a ready-made URL like
-   `https://signal.callmebot.com/signal/send.php?phone=c242bb7d-…&apikey=123456&text=…`.
-4. In Render → offerloop → **Environment**, add:
-   - `SIGNAL_PHONE`: the `phone=` value from that URL (an ID like `c242bb7d-…`, or your number
-     with country code)
-   - `SIGNAL_CALLMEBOT_KEY`: the API key
-5. Save. After the redeploy, open **Automations → Signal alerts → Send a test**.
-
-**Approving from the message.** Each message has one-tap links: **Approve all**, **Approve
-just one** (numbered like the list), and **Skip this run**. A link opens a small page with an
-**Approve** button (one tap, no login needed) — it never acts just by being opened, because
-messengers open links to build previews. Each link works once, for 24 hours, and all links of a
-run stop working once it's approved or skipped, on the site or by link.
-
-What to know: CallMeBot can read what it relays, including those links, so anyone who saw the
-message could approve that run's jobs in those 24 hours (never anything else). Messages carry
-only job titles, companies and links. Remove either variable to stop the messages.
+Each person sets up their own on **Automations → Signal alerts** — see the
+[Signal guide](../apps/platform/content/docs/signal.md). (On a one-person install,
+`SIGNAL_PHONE` and `SIGNAL_CALLMEBOT_KEY` in the environment still work.)

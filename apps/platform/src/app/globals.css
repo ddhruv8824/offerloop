@@ -83,3 +83,28 @@
     transition-duration: 0ms !important;
   }
 }
+
+/* Docs pages (rendered Markdown). */
+.doc-content {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--color-text);
+}
+.doc-content > * + * { margin-top: 1rem; }
+.doc-content h2 { margin-top: 2.5rem; font-size: 1.4rem; font-weight: 600; scroll-margin-top: 5rem; }
+.doc-content h3 { margin-top: 1.75rem; font-size: 1.1rem; font-weight: 600; scroll-margin-top: 5rem; }
+.doc-content h2 a, .doc-content h3 a { color: inherit; text-decoration: none; }
+.doc-content a { color: var(--color-coral-strong); font-weight: 600; }
+.doc-content a:hover { text-decoration: underline; }
+.doc-content ul { list-style: disc; padding-left: 1.4rem; }
+.doc-content ol { list-style: decimal; padding-left: 1.4rem; }
+.doc-content li + li { margin-top: 0.35rem; }
+.doc-content code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.85em; background: color-mix(in srgb, var(--color-ink) 6%, transparent); padding: 0.1em 0.35em; border-radius: 4px; }
+.doc-content pre { overflow-x: auto; border-radius: 8px; background: var(--color-ink); color: var(--color-paper); padding: 1rem; font-size: 0.82rem; line-height: 1.6; }
+.doc-content :not(pre) > code { overflow-wrap: anywhere; }
+.doc-content pre code { background: none; padding: 0; color: inherit; }
+.doc-content blockquote { border-left: 3px solid var(--color-coral); background: var(--color-paper); padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; color: var(--color-muted); }
+.doc-content table { width: 100%; border-collapse: collapse; font-size: 0.88rem; display: block; overflow-x: auto; }
+.doc-content th, .doc-content td { border: 1px solid var(--color-line); padding: 0.5rem 0.7rem; text-align: left; vertical-align: top; }
+.doc-content th { background: var(--color-paper); font-weight: 600; }
+.doc-content hr { border-color: var(--color-line); margin: 2rem 0; }

@@ -6,7 +6,7 @@ import { Badge, Button, Card, CardHeader } from "@/components/ui";
 import { DAILY_APPLY_LIMIT, startedToday } from "@/lib/apply-queue";
 import { createAgentKey, disconnectAgent, removeFromApplyQueue, type AgentStatus, type ApplyItem } from "@/lib/workflows";
 
-const GUIDE_URL = "https://github.com/ddhruv8824/offerloop/blob/main/services/job-agent/docs/offerloop-agent.md";
+const GUIDE_URL = "/docs/hirist-agent";
 
 const STATUS: Record<ApplyItem["status"], { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   queued: { label: "Waiting for your PC", tone: "neutral" },

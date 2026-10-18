@@ -18,8 +18,14 @@ services:
       # Keep Node within the 512 MB instance.
       - key: NODE_OPTIONS
         value: --max-old-space-size=384
-      # Asked for when the Blueprint is created.
-      - key: APP_PASSWORD
+      # Accounts (Supabase Auth) — see apps/platform/content/docs/running-offerloop.md.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ADMIN_EMAILS # your email: no invite needed, gets the Admin page
+        sync: false
+      - key: SUPPORT_EMAIL
         sync: false
       - key: DATABASE_URL # Supabase → Connect → Session pooler connection string
         sync: false
@@ -35,8 +41,4 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      # Optional: Signal alerts when a workflow waits for approval (deploy/RENDER.md).
-      - key: SIGNAL_PHONE
-        sync: false
-      - key: SIGNAL_CALLMEBOT_KEY
-        sync: false
+
