@@ -1,7 +1,7 @@
 // Run: node --experimental-strip-types --test scripts/apply-queue.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claim, DAILY_APPLY_LIMIT, enqueue, hiristIdOf, remove, report, startedToday, trimQueue } from "../src/lib/apply-queue.ts";
+import { claim, DAILY_APPLY_LIMIT, enqueue, hiristIdOf, reclaimStale, remove, report, startedToday, trimQueue } from "../src/lib/apply-queue.ts";
 
 let n = 0;
 const uid = () => `q${++n}`;
@@ -62,6 +62,16 @@ test("requeue and skipped don't use up the day; stale claims are offered again",
   // items[2] never reported back: after 30 minutes it's offered again.
   const retry = claim(queue, { now: later(45) });
   assert.deepEqual(retry.items.map((i) => i.hiristId).sort(), ["1", "3"]);
+});
+
+test("a job stuck in progress is put back on check-in, before the agent asks for work", () => {
+  const queue = [];
+  enqueue(queue, [hiristJob(1)], run, { max: 1, now: T0, uid });
+  claim(queue, { now: T0 }); // the agent took it, then the PC slept
+  assert.equal(reclaimStale(queue, later(10)), 0, "still within the 30 minutes");
+  assert.equal(queue.filter((q) => q.status === "queued").length, 0);
+  assert.equal(reclaimStale(queue, later(45)), 1);
+  assert.equal(queue[0].status, "queued", "so the next check-in sees it waiting");
 });
 
 test("report only accepts results for jobs in progress", () => {

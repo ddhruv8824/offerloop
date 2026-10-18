@@ -1,4 +1,4 @@
-import { DAILY_APPLY_LIMIT, startedToday } from "@/lib/apply-queue";
+import { DAILY_APPLY_LIMIT, reclaimStale, startedToday } from "@/lib/apply-queue";
 import { isAgentRequest, notAgent } from "@/lib/server/agent-auth";
 import { updateStore } from "@/lib/server/store";
 
@@ -9,6 +9,7 @@ export async function GET(req: Request) {
   if (!(await isAgentRequest(req))) return notAgent();
   const status = await updateStore((data) => {
     if (data.agent) data.agent.lastSeenAt = new Date().toISOString();
+    reclaimStale(data.applyQueue);
     return {
       queued: data.applyQueue.filter((q) => q.status === "queued").length,
       remainingToday: Math.max(0, DAILY_APPLY_LIMIT - startedToday(data.applyQueue)),

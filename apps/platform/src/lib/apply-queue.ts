@@ -121,6 +121,25 @@ export function startedToday(queue: ApplyItem[], now = new Date()): number {
 }
 
 /**
+ * Jobs the agent took but never reported on (PC slept, Chrome closed, network dropped) go
+ * back to the queue after a while. Run on every check-in, not only when the agent asks for
+ * work: it only asks when something is queued, so a stuck job would otherwise stay stuck.
+ */
+export function reclaimStale(queue: ApplyItem[], now = new Date()): number {
+  let reclaimed = 0;
+  for (const q of queue) {
+    if (q.status === "in_progress" && (!q.claimedAt || now.getTime() - Date.parse(q.claimedAt) > CLAIM_TIMEOUT_MS)) {
+      q.status = "queued";
+      q.message = "Offered again: the agent stopped before reporting a result.";
+      q.claimedAt = undefined;
+      q.updatedAt = now.toISOString();
+      reclaimed++;
+    }
+  }
+  return reclaimed;
+}
+
+/**
  * The agent asks for work: hand out queued jobs (oldest first) up to what's left of
  * today's limit, marking them in progress. Jobs claimed long ago with no result go back
  * to the queue first.
@@ -133,14 +152,7 @@ export function claim(
   remainingToday: number;
 } {
   const at = now.toISOString();
-  for (const q of queue) {
-    if (q.status === "in_progress" && q.claimedAt && now.getTime() - Date.parse(q.claimedAt) > CLAIM_TIMEOUT_MS) {
-      q.status = "queued";
-      q.message = "Offered again: the agent stopped before reporting a result.";
-      q.claimedAt = undefined;
-      q.updatedAt = at;
-    }
-  }
+  reclaimStale(queue, now);
   const left = Math.max(0, limit - startedToday(queue, now));
   // Oldest first. The queue holds newest first, so among jobs queued together (same time),
   // the later position is the one approved first.
