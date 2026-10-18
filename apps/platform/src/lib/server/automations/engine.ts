@@ -6,6 +6,7 @@
 import { formatSalary, insightsFor, type JobInsights } from "@/lib/company-info";
 import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
 import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
+import { addToLearn } from "@/lib/learn";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -43,6 +44,7 @@ const toRunJob = (j: ScoredJob, isNew: boolean): RunJob => ({
   isNew,
   flags: j.vetoed ? [`Hits a deal-breaker: ${j.vetoed}`, ...j.flags] : j.flags,
   verdict: j.fit?.verdict,
+  missing: j.missing,
   strengths: j.fit?.strengths,
   gaps: j.fit?.gaps,
   minExperience: j.minExperience,
@@ -75,7 +77,8 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
   switch (step.actionId) {
     case "jobs.find": {
       if (!profile) throw new StepFailure(NO_PROFILE);
-      const result = await searchJobs(profile, 300);
+      const roleFirst = String(settings.newTools ?? "").startsWith("Don't count");
+      const result = await searchJobs(profile, 300, { roleFirst });
       const source = String(settings.source ?? "");
       const minScore = Number(settings.minScore ?? 0);
       const max = Math.max(1, Math.min(50, Number(settings.max ?? 10)));
@@ -358,11 +361,16 @@ export async function approveRun(runId: string, jobIds: string[]): Promise<void>
   await updateStore((data) => {
     const run = data.runs.find((r) => r.id === runId);
     if (!run || run.status !== "waiting_approval") throw new StepFailure("That run isn't waiting for approval any more.");
-    const valid = run.jobs.filter((j) => jobIds.includes(j.id)).map((j) => j.id);
+    const approved = run.jobs.filter((j) => jobIds.includes(j.id));
+    const valid = approved.map((j) => j.id);
     run.approvedJobIds = valid;
+    // The tools these jobs ask for that you don't have yet go on your Learn list.
+    const toLearn = addToLearn(data.learning, approved);
     const state = run.steps[run.cursor];
     state.status = "done";
-    state.message = `You approved ${valid.length} of ${plural(run.jobs.length, "job")}.`;
+    state.message =
+      `You approved ${valid.length} of ${plural(run.jobs.length, "job")}.` +
+      (toLearn.length ? ` New to learn: ${toLearn.slice(0, 6).join(", ")}${toLearn.length > 6 ? ` +${toLearn.length - 6} more` : ""} — see Learn.` : "");
     run.cursor++;
     run.status = "running";
   });

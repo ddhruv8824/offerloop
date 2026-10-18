@@ -168,6 +168,20 @@ test("fit: a breakdown, a verdict and reasons for and against", () => {
   assert.equal(vague.fit.areas.find((a) => a.key === "pay").note, "Not stated");
 });
 
+test("role first: new tools don't pull the match down", () => {
+  const ai = { ...profile, targetRole: "AI Engineer", skills: ["Python", "LangChain", "RAG"] };
+  const newTools = job({ title: "AI Engineer", description: "AI Engineer: Python, CrewAI, DSPy, MCP, Qdrant and Langfuse. 2+ years of experience." });
+  const usual = scoreJob(newTools, ai);
+  const roleFirst = scoreJob(newTools, ai, { roleFirst: true });
+  assert.ok(roleFirst.score > usual.score + 10, `${roleFirst.score} vs ${usual.score}`);
+  assert.ok(roleFirst.missing.includes("CrewAI") && roleFirst.missing.includes("MCP"));
+  assert.ok(roleFirst.fit.gaps.some((g) => g.startsWith("New to you: ")));
+  assert.equal(roleFirst.fit.weights.role, 45);
+  // A different kind of role still scores low: role first is about tools, not about the job.
+  const wrongRole = scoreJob(job({ title: "Frontend Engineer", description: "React, TypeScript." }), ai, { roleFirst: true, keepAll: true });
+  assert.ok(wrongRole.score < 60, `${wrongRole.score}`);
+});
+
 test("deal-breakers rule jobs out", () => {
   const strict = { ...profile, dealBreakers: ["No service bond", "Remote only", "No crypto"] };
   assert.match(scoreJob(job({ remote: true, description: "React. 2 year service bond applies." }), strict).vetoed, /bond/);

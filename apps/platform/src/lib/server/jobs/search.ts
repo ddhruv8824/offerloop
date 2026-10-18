@@ -49,7 +49,7 @@ export function fetchCompany(source: CompanySource, profile: SearchProfile): Pro
 
 const reason = (err: unknown) => (err instanceof SourceError ? err.message : "failed");
 
-export async function searchJobs(profile: SearchProfile, max = 80): Promise<SearchResult> {
+export async function searchJobs(profile: SearchProfile, max = 80, { roleFirst = false } = {}): Promise<SearchResult> {
   const scored: ScoredJob[] = [];
   const scanned: FoundJob[] = [];
   const reports: SourceReport[] = [];
@@ -59,7 +59,7 @@ export async function searchJobs(profile: SearchProfile, max = 80): Promise<Sear
     const fits = jobs
       .map((j) => {
         try {
-          return scoreJob(withStatedSalary(j), profile);
+          return scoreJob(withStatedSalary(j), profile, { roleFirst });
         } catch (err) {
           console.warn(`[jobs] skipped ${j.id}:`, err instanceof Error ? err.message : err);
           return null;

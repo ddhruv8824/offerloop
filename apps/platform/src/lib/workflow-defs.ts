@@ -44,6 +44,13 @@ export const ACTIONS: ActionDef[] = [
     produces: ["job"],
     settings: [
       { key: "source", label: "From", type: "select", default: "Hirist + career pages", options: ["Hirist + career pages", "Hirist only", "Career pages only"] },
+      {
+        key: "newTools",
+        label: "New tools in the JD",
+        type: "select",
+        default: "Lower the match",
+        options: ["Lower the match", "Don't count — add to Learn"],
+      },
       { key: "minScore", label: "Minimum match", type: "number", default: 70, suffix: "%" },
       { key: "max", label: "At most", type: "number", default: 10, suffix: "jobs" },
     ],
@@ -204,6 +211,8 @@ export interface RunJob {
   /** Not seen by an earlier run of this workflow. */
   isNew: boolean;
   flags: string[];
+  /** Skills the posting asks for that aren't on the profile (the "Learn" list is built from these). */
+  missing?: string[];
   /** "Strong fit", "Good fit"… and the main reasons for and against (runs from before lack these). */
   verdict?: FitVerdict;
   strengths?: string[];
@@ -272,7 +281,7 @@ export const TEMPLATES: {
     trigger: { kind: "daily", time: "09:00" },
     actions: ["jobs.find", "companies.insights", "resume.tailor", "workflow.approval", "hirist.apply", "tracker.add", "workflow.summary"],
     // Only Hirist jobs can be applied to by the agent; career-page jobs would just pile up for approval.
-    settings: { "jobs.find": { source: "Hirist only" } },
+    settings: { "jobs.find": { source: "Hirist only", newTools: "Don't count — add to Learn" } },
   },
   {
     id: "daily-hunt",

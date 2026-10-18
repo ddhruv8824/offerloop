@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --port 3100",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test scripts/email-classifier.test.mjs scripts/jobs.test.mjs scripts/schedule.test.mjs scripts/company-info.test.mjs scripts/salary.test.mjs scripts/skills.test.mjs scripts/resume-facts.test.mjs scripts/apply-queue.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings --test scripts/email-classifier.test.mjs scripts/jobs.test.mjs scripts/schedule.test.mjs scripts/company-info.test.mjs scripts/salary.test.mjs scripts/skills.test.mjs scripts/resume-facts.test.mjs scripts/apply-queue.test.mjs scripts/learn.test.mjs"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.0",
@@ -17,6 +17,7 @@
     "@offerloop/storage": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.553.0",
+    "mermaid": "^11.17.2",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",

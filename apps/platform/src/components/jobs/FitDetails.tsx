@@ -55,6 +55,7 @@ export function FitReasons({ strengths = [], gaps = [], className }: { strengths
 
 /** "Why 72%?": one line per area (skills, role, experience, location, pay), plus reasons. */
 export function FitDetails({ fit, score }: { fit: JobFit; score: number }) {
+  const w = fit.weights ?? { skills: 45, role: 25, experience: 15, location: 15 };
   return (
     <details className="group mt-3 text-xs">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-semibold text-muted hover:text-text">
@@ -76,7 +77,11 @@ export function FitDetails({ fit, score }: { fit: JobFit; score: number }) {
           ))}
         </dl>
         <FitReasons strengths={fit.strengths} gaps={fit.gaps} className="mt-3 border-t border-line pt-2" />
-        <p className="mt-2 text-faint">Score weights: skills 45, role 25, experience 15, location 15. Pay doesn&apos;t change the score; your minimum and deal-breakers rule jobs out instead.</p>
+        <p className="mt-2 text-faint">
+          Score weights: skills {w.skills}, role {w.role}, experience {w.experience}, location {w.location}
+          {w.role > w.skills ? " (role first: new tools don't count against it)" : ""}. Pay doesn&apos;t change the score; your minimum and
+          deal-breakers rule jobs out instead.
+        </p>
       </div>
     </details>
   );

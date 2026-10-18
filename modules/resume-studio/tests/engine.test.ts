@@ -18,6 +18,7 @@ import { handleRedlineRequest } from "../src/server/handler";
 import { LlmConfigError, resolveConfig, type RunOptions } from "../src/server/models";
 import { ChatDecision, JDAnalysis, TailorPlan, TailorReview } from "../src/server/schemas";
 import { applyReview } from "../src/server/review";
+import { cleanMermaid, StudyNotesSchema, writeStudyNotes } from "../src/server/study-notes";
 import * as store from "../src/server/store";
 import { assignIds, buildMasterProfile } from "../src/server/structure";
 import { runChat } from "../src/server/chat";
@@ -505,4 +506,23 @@ test("schemas fill in defaults for fields the model leaves out", () => {
   assert.deepEqual(plan.gaps, []);
   const d = ChatDecision.parse({ action: "answer", reply: "hi" });
   assert.deepEqual(d.profile_facts, []);
+});
+
+test("study notes: tuned to what the candidate knows, diagram cleaned up", async () => {
+  let sent = "";
+  const ask = (async (_cfg, schema, prompt) => {
+    assert.equal(schema, StudyNotesSchema);
+    sent = String((prompt as { messages: Array<{ content: unknown }> }).messages[0]!.content);
+    return StudyNotesSchema.parse({
+      category: "Agent framework",
+      summary: "CrewAI runs teams of agents.",
+      diagram: "```mermaid\nflowchart LR\n  A[\"Task\"] --> B[\"Agent\"]\n```",
+      interview_questions: [{ question: "Q?", answer_hint: "A." }],
+    });
+  }) as NonNullable<RunOptions["ask"]>;
+  const notes = await writeStudyNotes(LLM as never, { skill: "CrewAI", knownSkills: ["LangGraph", "Python"], roles: ["AI Engineer at Tredence"] }, { ask });
+  assert.ok(sent.includes("## tool\nCrewAI") && sent.includes("LangGraph, Python") && sent.includes("AI Engineer at Tredence"));
+  assert.equal(notes.diagram, 'flowchart LR\n  A["Task"] --> B["Agent"]');
+  assert.deepEqual(notes.key_concepts, [], "missing fields default instead of failing");
+  assert.equal(cleanMermaid("mermaid\nsequenceDiagram\n  A->>B: hi"), "sequenceDiagram\n  A->>B: hi");
 });

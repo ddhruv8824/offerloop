@@ -69,6 +69,8 @@ export interface JobFit {
   strengths: string[];
   /** Up to 3 things that count against it. */
   gaps: string[];
+  /** How much each area counted (role first weighs the role more than the tools). */
+  weights?: { skills: number; role: number; experience: number; location: number };
 }
 
 export interface ScoredJob extends Omit<FoundJob, "description"> {
@@ -160,6 +162,47 @@ const SKILL_PATTERNS: [string, string][] = [
   ["LangChain", "langchain"],
   ["LangGraph", "langgraph"],
   ["RAG", "rag|retrieval[- ]augmented"],
+  // The fast-moving AI tooling: detected in descriptions so new tools show up as things to learn.
+  ["LlamaIndex", "llama[- ]?index"],
+  ["CrewAI", "crew\\s?ai"],
+  ["AutoGen", "autogen"],
+  ["DSPy", "dspy"],
+  ["Semantic Kernel", "semantic kernel"],
+  ["Haystack", "haystack"],
+  ["Pydantic AI", "pydantic[- ]ai"],
+  ["OpenAI Agents SDK", "openai agents sdk|agents sdk"],
+  ["MCP", "mcp|model context protocol"],
+  ["AI Agents", "agentic(?: ai| systems?| workflows?)?|ai agents?|multi[- ]agent(?: systems?)?"],
+  ["OpenAI API", "openai(?: api)?|gpt-?4o?|gpt-?5"],
+  ["Claude API", "anthropic|claude"],
+  ["Gemini API", "gemini(?: api)?"],
+  ["Hugging Face", "hugging\\s?face"],
+  ["vLLM", "vllm"],
+  ["Ollama", "ollama"],
+  ["Fine-tuning", "fine[- ]?tun(?:e|ed|ing)|q?lora|peft"],
+  ["Prompt Engineering", "prompt engineering|prompt design"],
+  ["Embeddings", "embeddings?"],
+  ["Vector Databases", "vector (?:db|database|store|search)s?"],
+  ["Pinecone", "pinecone"],
+  ["Weaviate", "weaviate"],
+  ["Qdrant", "qdrant"],
+  ["Milvus", "milvus"],
+  ["ChromaDB", "chroma\\s?db|chroma"],
+  ["pgvector", "pgvector"],
+  ["FAISS", "faiss"],
+  ["LangSmith", "langsmith"],
+  ["Langfuse", "langfuse"],
+  ["MLflow", "mlflow"],
+  ["Weights & Biases", "wandb|weights (?:&|and) biases"],
+  ["Amazon Bedrock", "bedrock"],
+  ["Vertex AI", "vertex\\s?ai"],
+  ["Azure OpenAI", "azure openai"],
+  ["SageMaker", "sagemaker"],
+  ["Databricks", "databricks"],
+  ["Streamlit", "streamlit"],
+  ["Gradio", "gradio"],
+  ["n8n", "n8n"],
+  ["Guardrails", "guardrails?"],
   ["Pandas", "pandas"],
   ["Spark", "(?:py)?spark"],
   ["Airflow", "airflow"],
@@ -297,6 +340,10 @@ function seniorityFloor(title: string): number | undefined {
 
 /* ── Score ────────────────────────────────────────────── */
 
+/** How much each area counts (out of 100). Role first is for people who'll learn new tools. */
+export const WEIGHTS = { skills: 45, role: 25, experience: 15, location: 15 };
+export const ROLE_FIRST_WEIGHTS = { skills: 15, role: 45, experience: 20, location: 20 };
+
 export function verdictFor(score: number): FitVerdict {
   return score >= 80 ? "Strong fit" : score >= 65 ? "Good fit" : score >= 50 ? "Worth a try" : "Long shot";
 }
@@ -335,7 +382,7 @@ const DEAL_BREAKER_SIGNALS: [RegExp, RegExp, string][] = [
  * Returns null when the job isn't relevant at all (wrong kind of role, or wrong place) —
  * unless `keepAll` is set (a job the user pasted themselves is always scored and shown).
  */
-export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = false } = {}): ScoredJob | null {
+export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = false, roleFirst = false } = {}): ScoredJob | null {
   const relevance = roleRelevance(job.title, profile.targetRole);
   if (relevance === 0 && !keepAll) return null;
   const place = locationFit(job, profile.locations);
@@ -360,14 +407,18 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
   const titleOnly = job.skills.length === 0 && !(job.description ?? "").trim();
   // …and a drop if the title names skills and you have none of them ("Angular Developer" for a React person).
   const titleOnlyFit = total ? 0.25 + 0.25 * (matchedWeight / total) : 0.4;
-  const skillFit = titleOnly ? titleOnlyFit : (matchedWeight + NEUTRAL * PRIOR) / (total + PRIOR);
+  const usualSkillFit = titleOnly ? titleOnlyFit : (matchedWeight + NEUTRAL * PRIOR) / (total + PRIOR);
+  // Role first: tools you don't know yet are things to learn, not a reason to skip the job.
+  // Skills you have still lift the score; missing ones never drop it below neutral.
+  const skillFit = roleFirst ? Math.max(NEUTRAL, usualSkillFit) : usualSkillFit;
 
   const minExp = job.minExperience ?? parseMinExperience(text) ?? seniorityFloor(job.title);
   const gap = minExp === undefined ? 0 : minExp - profile.experienceYears;
   const over = job.maxExperience !== undefined ? profile.experienceYears - job.maxExperience : 0;
   const expFit = gap <= 0 ? (over > 3 ? 0.6 : 1) : gap <= 1 ? 0.7 : gap <= 2 ? 0.4 : 0.1;
 
-  const raw = 45 * skillFit + 25 * relevance + 15 * expFit + 15 * (place === "exact" ? 1 : place === "remote" ? 0.85 : 0);
+  const w = roleFirst ? ROLE_FIRST_WEIGHTS : WEIGHTS;
+  const raw = w.skills * skillFit + w.role * relevance + w.experience * expFit + w.location * (place === "exact" ? 1 : place === "remote" ? 0.85 : 0);
   // Being years short is close to disqualifying however well the skills line up, so it caps the score.
   const cap = gap >= 3 ? 45 : gap >= 2 ? 62 : 100;
   // A posting left open for many months is often an "always hiring" listing, not one live opening.
@@ -411,7 +462,7 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
     skills: names.map((name) => ({ name, required: asked.find((s) => canonicalSkill(s.name) === name)?.required })),
     minExperience: minExp,
     score: Math.max(0, Math.min(100, score)),
-    fit: explainFit({ job, profile, score: Math.max(0, Math.min(100, score)), skillFit, titleOnly, names, matched, missing, required: names.filter((n) => weight(n) === 2), relevance, minExp, gap, over, expFit, place, payTooLow }),
+    fit: explainFit({ roleFirst, job, profile, score: Math.max(0, Math.min(100, score)), skillFit, titleOnly, names, matched, missing, required: names.filter((n) => weight(n) === 2), relevance, minExp, gap, over, expFit, place, payTooLow }),
     vetoed,
     matched,
     missing,
@@ -424,6 +475,7 @@ export function scoreJob(job: FoundJob, profile: SearchProfile, { keepAll = fals
 
 /** The fit breakdown: one line per area, a verdict, and the main reasons for and against. */
 function explainFit(f: {
+  roleFirst: boolean;
   job: FoundJob;
   profile: SearchProfile;
   score: number;
@@ -461,7 +513,8 @@ function explainFit(f: {
         : "The posting doesn't list skills",
   });
   if (f.matched.length >= 2 && skills >= 60) strengths.push(`Has ${f.matched.length} of ${f.names.length} skills it asks for: ${listed(f.matched)}`);
-  if (missingRequired.length) gaps.push(`Missing must-have skill${missingRequired.length > 1 ? "s" : ""}: ${listed(missingRequired)}`);
+  if (f.roleFirst && f.missing.length) gaps.push(`New to you: ${listed(f.missing)} (added to Learn if you approve it)`);
+  else if (missingRequired.length) gaps.push(`Missing must-have skill${missingRequired.length > 1 ? "s" : ""}: ${listed(missingRequired)}`);
   else if (f.missing.length && skills < 60) gaps.push(`Asks for ${listed(f.missing)}, which your profile doesn't list`);
 
   // Role
@@ -520,7 +573,7 @@ function explainFit(f: {
   if (range && !f.payTooLow && profile.minSalaryLpa && range[1] >= profile.minSalaryLpa) strengths.push(`Pays ${lpa(range)}, above your ${profile.minSalaryLpa} LPA minimum`);
   if (f.payTooLow) gaps.push(`Pays ${lpa(range!)}, below your ${profile.minSalaryLpa} LPA minimum`);
 
-  return { verdict: verdictFor(f.score), areas, strengths: strengths.slice(0, 3), gaps: gaps.slice(0, 3) };
+  return { verdict: verdictFor(f.score), areas, strengths: strengths.slice(0, 3), gaps: gaps.slice(0, 3), weights: f.roleFirst ? ROLE_FIRST_WEIGHTS : WEIGHTS };
 }
 
 /* ── Clean ────────────────────────────────────────────── */

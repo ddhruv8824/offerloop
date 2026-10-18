@@ -9,6 +9,7 @@ import path from "node:path";
 import { openStorage } from "@offerloop/storage";
 import { trimQueue, type ApplyItem } from "@/lib/apply-queue";
 import type { SearchProfile } from "@/lib/jobs";
+import type { LearnItem } from "@/lib/learn";
 import type { SalaryObservation } from "@/lib/salary";
 import type { Workflow, WorkflowRun } from "@/lib/workflow-defs";
 
@@ -25,6 +26,8 @@ export interface StoreData {
   marketScans: Record<string, string>;
   /** Approved Hirist jobs waiting for (or done by) the job agent on the user's PC. */
   applyQueue: ApplyItem[];
+  /** Tools the approved jobs ask for that aren't on the profile yet (see lib/learn.ts). */
+  learning: LearnItem[];
   /** The job agent's key, stored only as a hash. */
   agent?: {
     keyHash: string;
@@ -50,7 +53,7 @@ const KEY = "automations";
 const g = globalThis as unknown as { __offerloopStore?: { queue: Promise<unknown> } };
 const state = (g.__offerloopStore ??= { queue: Promise.resolve() });
 
-const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {}, applyQueue: [] });
+const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {}, applyQueue: [], learning: [] });
 
 async function load(): Promise<StoreData> {
   try {
@@ -91,4 +94,20 @@ export function updateStore<T>(change: (data: StoreData) => T | Promise<T>): Pro
   const result = state.queue.then(run, run);
   state.queue = result.catch(() => undefined);
   return result;
+}
+
+/* ── Study notes: one storage key per tool, outside the main document (they're large). ── */
+
+const notesKey = (key: string) => `learn-notes/${key}`;
+
+export async function readStudyNotes<T>(key: string): Promise<T | null> {
+  return (await storage().get<T>(notesKey(key))) ?? null;
+}
+
+export async function saveStudyNotes(key: string, notes: unknown): Promise<void> {
+  await storage().set(notesKey(key), notes);
+}
+
+export async function deleteStudyNotes(key: string): Promise<void> {
+  await storage().delete(notesKey(key));
 }
