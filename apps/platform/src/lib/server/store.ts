@@ -11,6 +11,7 @@ import { trimQueue, type ApplyItem } from "@/lib/apply-queue";
 import type { SearchProfile } from "@/lib/jobs";
 import type { LearnItem } from "@/lib/learn";
 import type { ApprovalLink } from "./approval-links";
+import type { SignalResult } from "./notify/signal";
 import type { SalaryObservation } from "@/lib/salary";
 import type { Workflow, WorkflowRun } from "@/lib/workflow-defs";
 
@@ -29,6 +30,8 @@ export interface StoreData {
   applyQueue: ApplyItem[];
   /** Tools the approved jobs ask for that aren't on the profile yet (see lib/learn.ts). */
   learning: LearnItem[];
+  /** How the last Signal message went (shown on the Automations page). */
+  signalLast?: SignalResult;
   /** One-tap approve/skip links sent in Signal messages (hashes only). */
   approvalLinks: ApprovalLink[];
   /** The job agent's key, stored only as a hash. */

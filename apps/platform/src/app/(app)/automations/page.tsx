@@ -87,7 +87,7 @@ export default function Automations() {
 
       {/* The job agent that applies on Hirist from the user's PC */}
       {ready && <HiristAgentCard agent={agent} queue={applyQueue} />}
-      {ready && <SignalCard />}
+      {ready && <SignalCard waitingRunId={waiting[0]?.id} />}
 
       {/* Recent runs */}
       {runs.length > 0 && (

@@ -9,7 +9,7 @@ import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
 import { approvalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
 import { makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
-import { signalConfigured, trySendSignal } from "@/lib/server/notify/signal";
+import { sendAndRecord, signalConfigured, trySendSignal, type SignalResult } from "@/lib/server/notify/signal";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -368,6 +368,20 @@ async function advanceSteps(runId: string): Promise<void> {
     if (waiting) notifyWaiting(waiting.run, waiting.links);
     if (!more) return;
   }
+}
+
+/** Send a waiting run's Signal message again, with fresh links (the old ones stop working). */
+export async function resendApproval(runId: string): Promise<SignalResult> {
+  const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
+  const made = await updateStore((data) => {
+    const run = data.runs.find((r) => r.id === runId);
+    if (!run || run.status !== "waiting_approval") throw new StepFailure("That run isn't waiting for approval any more.");
+    const { links, made } = makeApprovalLinks(data.approvalLinks, run);
+    data.approvalLinks = links;
+    return { run: structuredClone(run), links: made };
+  });
+  if (!site) throw new StepFailure("The site's address isn't known (set PUBLIC_URL).");
+  return sendAndRecord("approval", approvalMessage(made.run, site, made.links));
 }
 
 function notifyWaiting(run: WorkflowRun, links?: MadeLinks) {
