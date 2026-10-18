@@ -24,6 +24,8 @@ interface StepContext {
   run: WorkflowRun;
   profile?: SearchProfile;
   seenJobIds: string[];
+  /** Hirist ids already in the apply queue (waiting, applying, applied, needing you…). */
+  handledHiristIds: Set<string>;
 }
 
 /** An expected failure with a message meant for the user. */
@@ -78,9 +80,16 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
       const minScore = Number(settings.minScore ?? 0);
       const max = Math.max(1, Math.min(50, Number(settings.max ?? 10)));
       const seen = new Set(ctx.seenJobIds);
-      const fits = result.jobs
+      const matching = result.jobs
         .filter((j) => (source === "Hirist only" ? j.source === "Hirist" : source === "Career pages only" ? j.source !== "Hirist" : true))
         .filter((j) => j.score >= minScore);
+      // Jobs already applied to (or queued, or waiting for you) aren't worth approving again.
+      const handled = (j: ScoredJob) => {
+        const hiristId = hiristIdOf(j);
+        return hiristId !== null && ctx.handledHiristIds.has(hiristId);
+      };
+      const fits = matching.filter((j) => !handled(j));
+      const alreadyHandled = matching.length - fits.length;
       // A scheduled run reports only what's new since last time; a manual run shows everything.
       const picked = (run.startedBy === "schedule" ? fits.filter((j) => !seen.has(j.id)) : fits).slice(0, max).map((j) => toRunJob(j, !seen.has(j.id)));
       const fresh = picked.filter((j) => j.isNew).length;
@@ -90,6 +99,7 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
         message:
           `Scanned ${result.scanned.toLocaleString("en-IN")} open roles; ${plural(fits.length, "job")} at ${minScore}%+ match` +
           (run.startedBy === "schedule" ? `, ${fresh} new since the last run.` : `, kept the top ${picked.length} (${fresh} new).`) +
+          (alreadyHandled ? ` Hid ${plural(alreadyHandled, "job")} you've already applied to or queued.` : "") +
           (result.hiddenCount ? ` ${plural(result.hiddenCount, "job")} left out for your deal-breakers.` : "") +
           (failed ? ` ${plural(failed, "source")} didn't respond.` : ""),
         apply: (r, data) => {
@@ -266,7 +276,12 @@ async function advance(runId: string): Promise<void> {
       state.status = "running";
       const workflow = data.workflows.find((w) => w.id === run.workflowId);
       const step: WorkflowStep = workflow?.steps.find((s) => s.uid === state.uid) ?? { uid: state.uid, actionId: state.actionId, settings: {} };
-      const ctx: StepContext = { run: structuredClone(run), profile: data.profile, seenJobIds: [...(data.seenJobs[run.workflowId] ?? [])] };
+      const ctx: StepContext = {
+        run: structuredClone(run),
+        profile: data.profile,
+        seenJobIds: [...(data.seenJobs[run.workflowId] ?? [])],
+        handledHiristIds: new Set(data.applyQueue.filter((q) => q.status !== "failed" && q.status !== "removed").map((q) => q.hiristId)),
+      };
       return { step, ctx, cursor: run.cursor };
     });
     if (!claim) return;
