@@ -4,6 +4,7 @@ import type { ApplyResult } from "../application/application.js";
 import type { DetailedJob } from "../hirist/getJobDetails.js";
 import type { OfferloopClient, QueueStatus, QueuedJob } from "./client.js";
 import { outcomeOf, runConnectOnce, type ConnectDeps } from "./connect.js";
+import { runNotice } from "./notify.js";
 
 function expect(condition: boolean, message: string): void { if (!condition) throw new Error(message); }
 
@@ -111,5 +112,19 @@ expect(outcomeOf({ status: "UNKNOWN", reason: "EXTERNAL_REDIRECT" }).status === 
 expect(outcomeOf({ status: "UNKNOWN", reason: "DIRECT_CONTROL_MISSING" }).status === "failed", "no Apply button → failed");
 expect(outcomeOf({ status: "UNKNOWN", reason: "UNKNOWN_POST_CLICK" }).status === "needs_input", "unclear after click → needs input");
 expect(Boolean(outcomeOf({ status: "UNKNOWN", reason: "PROFILE_INCOMPLETE" }).stop), "incomplete profile stops the run");
+
+// 7. The Windows pop-up's text.
+{
+  const r = (company: string, status: QueueStatus) => ({ title: "Role", company, status });
+  const mixed = runNotice({ results: [r("Tredence", "applied"), r("KreditBee", "applied"), r("AuxoAI", "needs_input"), r("Acme", "requeue")] });
+  expect(mixed?.title === "Applied to 2 Hirist jobs", `title: ${mixed?.title}`);
+  expect(mixed?.lines[0] === "Applied: Tredence, KreditBee", `line: ${mixed?.lines[0]}`);
+  expect(mixed?.lines[1] === "Finish on Hirist: AuxoAI", `line: ${mixed?.lines[1]}`);
+  expect(runNotice({ results: [r("AuxoAI", "needs_input")] })?.title === "1 job needs you", "needs-you title");
+  expect(runNotice({ results: [] }) === null, "nothing done → no pop-up");
+  expect(runNotice({ results: [r("Acme", "requeue")] }) === null, "dry run → no pop-up");
+  const many = runNotice({ results: ["A", "B", "C", "D", "E", "F"].map((c) => r(c, "applied")) });
+  expect(many?.lines[0] === "Applied: A, B, C, D +2 more", `long list: ${many?.lines[0]}`);
+}
 
 console.log("Offerloop connect checks passed.");

@@ -101,6 +101,13 @@ That creates the task **Offerloop Hirist agent**, and from then on it's hands-of
 
 Check less often: `... install-schedule.ps1 -EveryMinutes 30`.
 
+**Windows pop-ups.** When a check applies to something, Windows shows a notification such as
+"Applied to 3 Hirist jobs — Applied: Tredence, KreditBee, TELUS Digital", including any job that
+needs you (screening questions). Click it to open Offerloop. If the agent gets stuck (say,
+Hirist logged you out) it pops up once, not on every check. Try one now with
+`npm run notify:test`; turn them off with `OFFERLOOP_NOTIFY="off"` in `.env`. No pop-up? Check
+Windows Settings → System → Notifications (and Do not disturb).
+
 If it gets stuck — usually because Hirist logged you out — the **Hirist agent** card on
 Offerloop's Automations page says so. Open the agent's Chrome from the taskbar, log in to
 hirist.tech, and the next check carries on; the approved jobs wait meanwhile.

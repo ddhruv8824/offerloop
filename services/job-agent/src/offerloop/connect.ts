@@ -62,12 +62,18 @@ export type ConnectDeps = {
   log: (line: string) => void;
 };
 
-export type ConnectSummary = { done: number; byStatus: Partial<Record<QueueStatus, number>>; stoppedBecause?: string };
+export type ConnectSummary = {
+  done: number;
+  byStatus: Partial<Record<QueueStatus, number>>;
+  /** Each job handled in this pass, in order (for the Windows notification). */
+  results: { title: string; company: string; status: QueueStatus }[];
+  stoppedBecause?: string;
+};
 
 /** One pass through the approved jobs. Live mode takes one job at a time; dry runs look at all and put them back. */
 export async function runConnectOnce(deps: ConnectDeps, { dryRun }: { dryRun: boolean }): Promise<ConnectSummary> {
   const { offerloop, log } = deps;
-  const summary: ConnectSummary = { done: 0, byStatus: {} };
+  const summary: ConnectSummary = { done: 0, byStatus: {}, results: [] };
   const hello = await offerloop.hello();
   if (!hello.queued) {
     log("Nothing approved is waiting. Approve Hirist jobs in an Offerloop workflow first.");
@@ -110,6 +116,7 @@ export async function runConnectOnce(deps: ConnectDeps, { dryRun }: { dryRun: bo
     await offerloop.report(job.id, outcome.status, outcome.message);
     summary.done++;
     summary.byStatus[outcome.status] = (summary.byStatus[outcome.status] ?? 0) + 1;
+    summary.results.push({ title: job.title, company: job.company, status: outcome.status });
     log(`  ${outcome.status.replace("_", " ")}: ${outcome.message}`);
 
     if (outcome.stop) {

@@ -22,6 +22,7 @@ import { mapJobDetail } from "../hirist/getJobDetails.js";
 import type { Page } from "playwright";
 import { createOfferloopClient, OfferloopError } from "./client.js";
 import { runConnectOnce } from "./connect.js";
+import { clearProblemNotice, noticeProblem, runNotice, showNotice } from "./notify.js";
 
 try {
   loadEnvFile();
@@ -61,6 +62,7 @@ const ready = async () => {
 };
 
 const offerloop = createOfferloopClient(url, key);
+const automationsUrl = `${url.replace(/\/+$/, "")}/automations`;
 // 45–120 seconds between applications.
 const pause = () => sleep(45_000 + Math.floor(Math.random() * 75_000));
 
@@ -91,6 +93,18 @@ async function once() {
   // is stuck (and clears it once applying works again).
   if (summary.stoppedBecause) await tellOfferloop(summary.stoppedBecause);
   else if (summary.done && !dryRun) await tellOfferloop(null);
+
+  // A Windows pop-up for what happened. A stop with nothing else done (e.g. logged out) pops
+  // up once, not on every 15-minute check.
+  if (!dryRun) {
+    const handled = summary.results.some((r) => r.status !== "requeue");
+    if (summary.stoppedBecause && !handled) await noticeProblem(summary.stoppedBecause, automationsUrl);
+    else {
+      const notice = runNotice(summary);
+      if (notice) await showNotice(notice, automationsUrl);
+    }
+    if (handled && !summary.stoppedBecause) await clearProblemNotice();
+  }
   return summary;
 }
 
@@ -120,7 +134,12 @@ try {
   if (expected) {
     console.error(`\n${(error as Error).message}`);
     // Can't report "Offerloop unreachable" to Offerloop; everything else (Chrome, Hirist login) we can.
-    if (!(error instanceof OfferloopError)) await tellOfferloop((error as Error).message.split("\n")[0]!);
+    // A sleeping or unreachable site sorts itself out by the next check, so no pop-up for that.
+    if (!(error instanceof OfferloopError)) {
+      const problem = (error as Error).message.split("\n")[0]!;
+      await tellOfferloop(problem);
+      await noticeProblem(problem, automationsUrl);
+    }
     process.exit(1);
   }
   throw error;
