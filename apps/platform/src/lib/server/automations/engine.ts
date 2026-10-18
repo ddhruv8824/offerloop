@@ -5,7 +5,7 @@
 // queue, so progress checks never wait behind a 10-second job search) → record the result.
 import { formatSalary, insightsFor, type JobInsights } from "@/lib/company-info";
 import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
-import { DAILY_APPLY_LIMIT, enqueue } from "@/lib/apply-queue";
+import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -193,7 +193,20 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
           } else {
             parts.push("No new Hirist jobs to apply to.");
           }
-          if (result.duplicates.length) parts.push(`${plural(result.duplicates.length, "job")} already queued or applied.`);
+          if (result.duplicates.length) {
+            // Say where each one already is, so "nothing new" doesn't read as "nothing happened".
+            const where = (job: (typeof result.duplicates)[number]) =>
+              data.applyQueue.find((q) => q.hiristId === hiristIdOf(job) && q.status !== "failed" && q.status !== "removed")?.status;
+            const count = (...statuses: string[]) => result.duplicates.filter((j) => statuses.includes(where(j) ?? "")).length;
+            const states = [
+              [count("queued", "in_progress"), "still waiting for your PC agent"],
+              [count("applied", "already_applied"), "already applied"],
+              [count("needs_input"), "need you to finish on Hirist"],
+              [count("skipped"), "apply on the company's site"],
+            ] as const;
+            const said = states.filter(([n]) => n > 0).map(([n, what]) => `${n} ${what}`);
+            parts.push(`Already in your queue from an earlier run: ${said.join(", ")}.`);
+          }
           if (result.notHirist.length) parts.push(`${plural(result.notHirist.length, "job")} from career pages: apply on the company's site.`);
           const extra = jobs.length - result.added.length - result.duplicates.length - result.notHirist.length;
           if (extra > 0) parts.push(`${extra} more over this step's limit of ${max}.`);
