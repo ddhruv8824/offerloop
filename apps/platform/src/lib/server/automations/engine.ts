@@ -8,7 +8,8 @@ import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
 import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
 import { approvalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
-import { trySendSignal } from "@/lib/server/notify/signal";
+import { makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
+import { signalConfigured, trySendSignal } from "@/lib/server/notify/signal";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -303,7 +304,7 @@ async function advance(runId: string): Promise<void> {
     }
 
     // 3. Record the result — unless the run was cancelled or replaced while the step worked.
-    let nowWaiting: WorkflowRun | null = null;
+    let nowWaiting: { run: WorkflowRun; links?: MadeLinks } | null = null;
     const more = await updateStore((data) => {
       const run = data.runs.find((r) => r.id === runId);
       if (!run || run.status !== "running" || run.cursor !== claim.cursor) return false;
@@ -319,22 +320,31 @@ async function advance(runId: string): Promise<void> {
       state.message = typeof message === "string" ? message : outcome.message;
       if (outcome.status === "waiting") {
         run.status = "waiting_approval";
-        nowWaiting = structuredClone(run);
+        // One-tap approve links go in the Signal message, so only make them when it's set up.
+        let links: MadeLinks | undefined;
+        if (signalConfigured() && run.jobs.length) {
+          const made = makeApprovalLinks(data.approvalLinks, run);
+          data.approvalLinks = made.links;
+          links = made.made;
+        }
+        nowWaiting = { run: structuredClone(run), links };
         return false;
       }
       run.cursor++;
       return true;
     });
     // Waiting for you: say so on Signal too (when it's set up), so you can approve from your phone.
-    if (nowWaiting) notifyWaiting(nowWaiting);
+    // (Set inside the callback above, which TypeScript can't follow.)
+    const waiting = nowWaiting as { run: WorkflowRun; links?: MadeLinks } | null;
+    if (waiting) notifyWaiting(waiting.run, waiting.links);
     if (!more) return;
   }
 }
 
-function notifyWaiting(run: WorkflowRun) {
+function notifyWaiting(run: WorkflowRun, links?: MadeLinks) {
   const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
   if (!site || !run.jobs.length) return;
-  void trySendSignal(approvalMessage(run, site));
+  void trySendSignal(approvalMessage(run, site, links));
 }
 
 const background = (runId: string) => void advance(runId).catch((err) => console.error("[automations] run crashed:", err));

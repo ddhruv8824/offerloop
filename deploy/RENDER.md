@@ -139,6 +139,12 @@ a link to approve. It uses [CallMeBot](https://www.callmebot.com)'s free Signal 
    - `SIGNAL_CALLMEBOT_KEY`: the API key
 5. Save. After the redeploy, open **Automations → Signal alerts → Send a test**.
 
-What to know: it's one-way (you approve on the site, from the link), and CallMeBot can read
-what it relays, so messages only carry job titles, companies and the link. Remove either
-variable to stop the messages.
+**Approving from the message.** Each message has one-tap links: **Approve all**, **Approve
+just one** (numbered like the list), and **Skip this run**. A link opens a small page with an
+**Approve** button (one tap, no login needed) — it never acts just by being opened, because
+messengers open links to build previews. Each link works once, for 24 hours, and all links of a
+run stop working once it's approved or skipped, on the site or by link.
+
+What to know: CallMeBot can read what it relays, including those links, so anyone who saw the
+message could approve that run's jobs in those 24 hours (never anything else). Messages carry
+only job titles, companies and links. Remove either variable to stop the messages.

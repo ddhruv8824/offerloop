@@ -10,6 +10,7 @@ import { openStorage } from "@offerloop/storage";
 import { trimQueue, type ApplyItem } from "@/lib/apply-queue";
 import type { SearchProfile } from "@/lib/jobs";
 import type { LearnItem } from "@/lib/learn";
+import type { ApprovalLink } from "./approval-links";
 import type { SalaryObservation } from "@/lib/salary";
 import type { Workflow, WorkflowRun } from "@/lib/workflow-defs";
 
@@ -28,6 +29,8 @@ export interface StoreData {
   applyQueue: ApplyItem[];
   /** Tools the approved jobs ask for that aren't on the profile yet (see lib/learn.ts). */
   learning: LearnItem[];
+  /** One-tap approve/skip links sent in Signal messages (hashes only). */
+  approvalLinks: ApprovalLink[];
   /** The job agent's key, stored only as a hash. */
   agent?: {
     keyHash: string;
@@ -53,7 +56,7 @@ const KEY = "automations";
 const g = globalThis as unknown as { __offerloopStore?: { queue: Promise<unknown> } };
 const state = (g.__offerloopStore ??= { queue: Promise.resolve() });
 
-const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {}, applyQueue: [], learning: [] });
+const empty = (): StoreData => ({ workflows: [], runs: [], seenJobs: {}, salaryObservations: [], marketScans: {}, applyQueue: [], learning: [], approvalLinks: [] });
 
 async function load(): Promise<StoreData> {
   try {
