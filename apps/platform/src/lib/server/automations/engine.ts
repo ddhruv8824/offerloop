@@ -6,10 +6,10 @@
 import { formatSalary, insightsFor, type JobInsights } from "@/lib/company-info";
 import { scoreJob, type ScoredJob, type SearchProfile } from "@/lib/jobs";
 import { DAILY_APPLY_LIMIT, enqueue, hiristIdOf } from "@/lib/apply-queue";
-import { approvalMessage } from "@/lib/approval-message";
+import { approvalMessage, shortApprovalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
 import { makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
-import { sendAndRecord, signalConfigured, trySendSignal, type SignalResult } from "@/lib/server/notify/signal";
+import { sendAndRecord, signalConfigured, type SignalResult } from "@/lib/server/notify/signal";
 import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
@@ -381,13 +381,32 @@ export async function resendApproval(runId: string): Promise<SignalResult> {
     return { run: structuredClone(run), links: made };
   });
   if (!site) throw new StepFailure("The site's address isn't known (set PUBLIC_URL).");
-  return sendAndRecord("approval", approvalMessage(made.run, site, made.links));
+  return sendApproval(made.run, site, made.links);
+}
+
+/**
+ * Send the approval message. CallMeBot sometimes can't deliver a long, link-heavy message
+ * ("Internal Signal Error") while short ones go through — then send the short version.
+ */
+async function sendApproval(run: WorkflowRun, site: string, links?: MadeLinks): Promise<SignalResult> {
+  const full = await sendAndRecord("approval", approvalMessage(run, site, links));
+  if (full.ok) return full;
+  const short = await sendAndRecord("approval", shortApprovalMessage(run, site, links));
+  return short.ok ? { ...short, detail: `Sent the short version (the full one failed). ${short.detail}` } : short;
 }
 
 function notifyWaiting(run: WorkflowRun, links?: MadeLinks) {
+  if (!signalConfigured() || !run.jobs.length) return;
   const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
-  if (!site || !run.jobs.length) return;
-  void trySendSignal(approvalMessage(run, site, links));
+  if (!site) {
+    // Without the site's address the links can't be built; say so where it's visible.
+    void updateStore((d) => {
+      d.signalLast = { ok: false, at: new Date().toISOString(), kind: "approval", detail: "Not sent: the site's address isn't known. Add PUBLIC_URL (e.g. https://offerloop-xxxx.onrender.com) in Render → Environment." };
+    }).catch(() => {});
+    return;
+  }
+  console.log(`[signal] sending the approval message for "${run.workflowName}" (${run.jobs.length} jobs)`);
+  void sendApproval(run, site, links);
 }
 
 const background = (runId: string) => void advance(runId).catch((err) => console.error("[automations] run crashed:", err));

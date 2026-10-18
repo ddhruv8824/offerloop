@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { WorkflowRun } from "@/lib/workflow-defs";
 
 export const LINK_TTL_MS = 24 * 3600_000;
-export const MAX_SINGLE_LINKS = 5;
+export const MAX_SINGLE_LINKS = 3;
 
 export interface ApprovalLink {
   hash: string;

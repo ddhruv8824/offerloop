@@ -1,7 +1,7 @@
 // Run: node --experimental-strip-types --test scripts/approval-message.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { approvalMessage } from "../src/lib/approval-message.ts";
+import { approvalMessage, shortApprovalMessage } from "../src/lib/approval-message.ts";
 import { findApprovalLink, linkJobIds, makeApprovalLinks } from "../src/lib/server/approval-links.ts";
 
 const job = (company, score, extra = {}) => ({ id: company, title: "AI Engineer", company, location: "", url: "", score, source: "Hirist", isNew: true, flags: [], ...extra });
@@ -12,16 +12,18 @@ test("approval message: numbered best first, one-tap links that match the number
   const { links, made } = makeApprovalLinks([], run, T0);
   const text = approvalMessage(run, "https://offerloop-x.onrender.com/", made);
   const lines = text.split("\n");
-  assert.equal(lines[0], 'Offerloop: "Apply on Hirist" found 6 jobs and is waiting for your approval.');
-  assert.equal(lines[2], "1. AI Engineer — Tredence (74%, Good fit) · new: CrewAI, MCP, Qdrant");
-  assert.equal(lines[3], "2. AI Engineer — Walt AI (63%)");
-  assert.ok(text.includes(`✅ Approve all 6: https://offerloop-x.onrender.com/a/${made.all}`));
-  assert.ok(text.includes(`1 → https://offerloop-x.onrender.com/a/${made.single[0].token}`));
+  assert.equal(lines[0], "Offerloop: Apply on Hirist found 6 jobs, waiting for your approval.");
+  assert.equal(lines[2], "1. AI Engineer - Tredence (74%, Good fit) | new: CrewAI, MCP, Qdrant");
+  assert.equal(lines[3], "2. AI Engineer - Walt AI (63%)");
+  assert.ok(text.includes(`APPROVE ALL 6: https://offerloop-x.onrender.com/a/${made.all}`));
+  assert.ok(text.includes(`Approve #1 only: https://offerloop-x.onrender.com/a/${made.single[0].token}`));
+  // Plain characters only (titles aside): relays are picky.
+  assert.match(text, /^[\x20-\x7E\n]*$/);
   // "#1" really is Tredence, the job listed first.
   assert.deepEqual(linkJobIds(findApprovalLink(links, made.single[0].token, T0), run), ["Tredence"]);
   assert.equal(linkJobIds(findApprovalLink(links, made.all, T0), run).length, 6);
   assert.equal(findApprovalLink(links, made.skip, T0).action, "skip");
-  assert.equal(made.single.length, 5);
+  assert.equal(made.single.length, 3);
 });
 
 test("approval links: secret-only, expire, and a new run's links replace the old ones", () => {
