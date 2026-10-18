@@ -1,14 +1,16 @@
 // Server only. Signal messages through CallMeBot's free Signal relay (personal use): you
 // message their bot once to get an API key, then the server can text you.
 //
-//   SIGNAL_PHONE           your Signal number in international format, e.g. +919812345678
-//                          (or the ID CallMeBot gave you, if it gave one)
+//   SIGNAL_PHONE           the "phone" value in the URL CallMeBot's bot sent you — often an ID
+//                          like c242bb7d-…, otherwise your number, e.g. +919812345678
 //   SIGNAL_CALLMEBOT_KEY   the API key the bot sent you
 //
 // One-way only, and CallMeBot can read what passes through it — so messages carry job titles
 // and a link, never keys or passwords. Unset either variable and nothing is sent.
 
-const ENDPOINT = "https://api.callmebot.com/signal/send.php";
+// The address CallMeBot's bot gives you when it sends your key. SIGNAL_CALLMEBOT_URL overrides
+// it, should CallMeBot move it again.
+const endpoint = () => process.env.SIGNAL_CALLMEBOT_URL?.trim() || "https://signal.callmebot.com/signal/send.php";
 const MAX_CHARS = 1500;
 
 export function signalConfigured(): boolean {
@@ -20,7 +22,7 @@ export async function sendSignal(text: string): Promise<void> {
   const phone = process.env.SIGNAL_PHONE?.trim();
   const apikey = process.env.SIGNAL_CALLMEBOT_KEY?.trim();
   if (!phone || !apikey) throw new Error("Signal isn't set up: add SIGNAL_PHONE and SIGNAL_CALLMEBOT_KEY on the server.");
-  const url = `${ENDPOINT}?${new URLSearchParams({ phone, apikey, text: text.slice(0, MAX_CHARS) })}`;
+  const url = `${endpoint()}?${new URLSearchParams({ phone, apikey, text: text.slice(0, MAX_CHARS) })}`;
   let res: Response;
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(20_000), cache: "no-store" });

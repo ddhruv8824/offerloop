@@ -131,11 +131,11 @@ a link to approve. It uses [CallMeBot](https://www.callmebot.com)'s free Signal 
 1. On your phone, open CallMeBot's Signal page (callmebot.com → **Signal**) and save the bot's
    number it shows to your contacts.
 2. In Signal, send that contact: `I allow callmebot to send me messages`
-3. Within a couple of minutes the bot replies with your **API key** (and sometimes an ID to use
-   instead of your number).
+3. Within a couple of minutes the bot replies with your **API key** and a ready-made URL like
+   `https://signal.callmebot.com/signal/send.php?phone=c242bb7d-…&apikey=123456&text=…`.
 4. In Render → offerloop → **Environment**, add:
-   - `SIGNAL_PHONE`: your Signal number with country code, e.g. `+919812345678` (or the ID the
-     bot gave you)
+   - `SIGNAL_PHONE`: the `phone=` value from that URL (an ID like `c242bb7d-…`, or your number
+     with country code)
    - `SIGNAL_CALLMEBOT_KEY`: the API key
 5. Save. After the redeploy, open **Automations → Signal alerts → Send a test**.
 
