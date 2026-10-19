@@ -8,9 +8,16 @@
 export const authMode = (): "accounts" | "single" => (supabaseConfig() ? "accounts" : "single");
 
 export function supabaseConfig(): { url: string; key: string } | null {
-  const url = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "");
+  const env = process.env;
+  // Also accepts the NEXT_PUBLIC_ names Supabase's "Connect" page suggests.
+  const url = (env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL)?.trim().replace(/\/+$/, "");
   // Supabase calls it the "anon" key (legacy) or the "publishable" key (new); either works.
-  const key = (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY)?.trim();
+  const key = (
+    env.SUPABASE_ANON_KEY ||
+    env.SUPABASE_PUBLISHABLE_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )?.trim();
   return url && key ? { url, key } : null;
 }
 
