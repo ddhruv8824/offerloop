@@ -1,5 +1,6 @@
 import { adminEmails, authMode, signupMode } from "@/lib/server/auth/config";
 import { checkInvite, holdInviteForEmail } from "@/lib/server/auth/members";
+import { afterJoinPath } from "@/lib/server/auth/landing";
 import { authMessage, formFields, goTo } from "@/lib/server/auth/redirects";
 import { supabaseServer } from "@/lib/server/auth/supabase";
 import { publicUrl } from "@/lib/server/public-url";
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     if (problem) return goTo(req, "/join", { error: problem });
   }
   // With "Confirm email" off in Supabase, you're signed in straight away.
-  if (data.session) return goTo(req, "/onboarding");
+  if (data.session && data.user) return goTo(req, await afterJoinPath({ id: data.user.id, email }));
   return goTo(req, "/login", { notice: "Check your inbox and confirm your email, then log in.", email });
 }
 

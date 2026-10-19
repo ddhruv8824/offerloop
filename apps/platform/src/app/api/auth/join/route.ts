@@ -1,4 +1,5 @@
 import { redeemInvite } from "@/lib/server/auth/members";
+import { afterJoinPath } from "@/lib/server/auth/landing";
 import { formFields, goTo } from "@/lib/server/auth/redirects";
 import { currentUser } from "@/lib/server/auth/session";
 
@@ -11,5 +12,5 @@ export async function POST(req: Request) {
   const f = await formFields(req);
   const result = await redeemInvite(user, f.code ?? "");
   if (typeof result === "string") return goTo(req, "/join", { error: result });
-  return goTo(req, "/onboarding");
+  return goTo(req, await afterJoinPath(user));
 }
