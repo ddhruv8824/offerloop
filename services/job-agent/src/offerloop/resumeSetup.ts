@@ -9,7 +9,7 @@ import { ensureHiristAuthenticated } from "../hirist/auth.js";
 import { connectToChrome } from "../hirist/browser.js";
 import { learnResumeUpload, ResumeUploadError, saveSetup, SETUP_FILE, uploadResume } from "../hirist/profileResume.js";
 import { createOfferloopClient } from "./client.js";
-import { mainResumeFile, mainResumePath } from "./resumeFiles.js";
+import { mainResumeFile, mainResumePath, ResumeFileError } from "./resumeFiles.js";
 
 try {
   loadEnvFile();
@@ -51,7 +51,7 @@ try {
   );
   process.exitCode = 0;
 } catch (error) {
-  console.error(`\n${error instanceof ResumeUploadError ? error.message : error instanceof Error ? error.stack : error}`);
+  console.error(`\n${error instanceof ResumeUploadError || error instanceof ResumeFileError ? error.message : error instanceof Error ? error.stack : error}`);
   process.exitCode = 1;
 } finally {
   rl.close();

@@ -8,13 +8,22 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { OfferloopClient } from "./client.js";
 
+/** A problem with the resume files, explained for the person (no stack trace). */
+export class ResumeFileError extends Error {}
+
 const DIR = fileURLToPath(new URL("../../data/resumes/", import.meta.url));
 
 /** Your own resume file, if you set OFFERLOOP_MAIN_RESUME (the one to put back). */
 export function mainResumePath(): string | null {
   const path = process.env.OFFERLOOP_MAIN_RESUME?.trim().replace(/^"|"$/g, "");
   if (!path) return null;
-  if (!existsSync(path)) throw new Error(`OFFERLOOP_MAIN_RESUME points to ${path}, which doesn't exist.`);
+  if (!existsSync(path)) {
+    throw new ResumeFileError(
+      `OFFERLOOP_MAIN_RESUME in .env points to ${path}, which doesn't exist.\n` +
+        'Put your resume PDF\'s real path there, with forward slashes, e.g. OFFERLOOP_MAIN_RESUME="C:/Users/Your Name/Documents/Resume.pdf"\n' +
+        "(in File Explorer: right-click the PDF → Copy as path), or leave it empty to use your Resume Studio resume.",
+    );
+  }
   return path;
 }
 
