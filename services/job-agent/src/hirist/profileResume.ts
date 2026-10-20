@@ -23,6 +23,10 @@ export type ResumeUploadSetup = {
   input: { id?: string; name?: string; accept?: string; index: number };
   /** A Save/Upload/Confirm button you had to click after picking the file, if any. */
   confirm?: string;
+  /** A button that keeps the new resume after it's uploaded (e.g. “Save & Next”), if Hirist needs one. */
+  save?: string;
+  /** Path of the request that button sends (generalised like uploadPath). */
+  savePath?: string;
   /** Path of the request that uploaded the file, with numbers generalised (e.g. /api/user/\d+/resume). */
   uploadPath: string;
   learnedAt: string;
@@ -164,9 +168,27 @@ export async function learnResumeUpload(page: Page, mainResume: string, prompt: 
   if (!response) throw new ResumeUploadError("Couldn't see Hirist upload the file. Check the page, then run `npm run resume:setup` again.");
   if (!response.ok()) throw new ResumeUploadError(`Hirist answered ${response.status()} to the upload. Check the page, then run setup again.`);
 
-  const setup: ResumeUploadSetup = { pageUrl, trigger, input, confirm, uploadPath: pathPattern(response.url()), learnedAt: new Date().toISOString() };
+  const uploadPath = pathPattern(response.url());
   log(`   Upload request: ${response.request().method()} ${new URL(response.url()).pathname} → ${response.status()}`);
-  return setup;
+
+  // Some pages only keep the new file once you press their save button.
+  await recordClicks(page);
+  const uploadRe = new RegExp(`^${uploadPath}$`);
+  const saving = watchUpload(page, (req) => /^(POST|PUT|PATCH)$/i.test(req.method()) && !uploadRe.test(new URL(req.url()).pathname) && !/track|analytics|log|event|collect/i.test(req.url()), 10 * 60_000);
+  await prompt(
+    "3. Does Hirist need a button pressed to keep the new resume (for example “Save & Next”)?\n" +
+      "   If yes, click it now in Chrome, wait a second, then press Enter here. If not, just press Enter.",
+  );
+  const save = (await lastClicked(page)) ?? undefined;
+  let savePath: string | undefined;
+  if (save && save !== trigger) {
+    const saved = await Promise.race([saving.done, new Promise<null>((r) => setTimeout(() => r(null), 3_000))]);
+    saving.stop();
+    if (saved) savePath = pathPattern(saved.url());
+    log(`   Save button: “${save}”${savePath ? ` (${saved!.request().method()} ${new URL(saved!.url()).pathname} → ${saved!.status()})` : ""}`);
+  } else saving.stop();
+
+  return { pageUrl, trigger, input, confirm, save: save && save !== trigger ? save : undefined, savePath, uploadPath, learnedAt: new Date().toISOString() };
 }
 
 /** Upload `file` as the resume on your Hirist profile, the way setup learned. Throws ResumeUploadError. */
@@ -177,7 +199,11 @@ export async function uploadResume(page: Page, setup: ResumeUploadSetup, file: s
     throw new ResumeUploadError(`Couldn't open your Hirist profile page (${error instanceof Error ? error.message.split("\n")[0] : error}).`);
   }
   await page.waitForTimeout(2_500); // the profile page fills in after it loads
-  if (/\/login|\/registration/.test(new URL(page.url()).pathname)) throw new ResumeUploadError("Hirist isn't logged in (it opened the login page).");
+  // Sent somewhere else: the login page, or a registration step other than your profile page.
+  const here = new URL(page.url()).pathname;
+  if (/\/login/.test(here) || (here !== new URL(setup.pageUrl).pathname && /\/registration/.test(here))) {
+    throw new ResumeUploadError(`Hirist opened ${here} instead of your profile page: log in again in the agent's Chrome.`);
+  }
 
   const endpoint = new RegExp(`^${setup.uploadPath}$`);
   const isSameUpload = (req: Request) => /^(POST|PUT|PATCH)$/i.test(req.method()) && endpoint.test(new URL(req.url()).pathname);
@@ -226,4 +252,19 @@ export async function uploadResume(page: Page, setup: ResumeUploadSetup, file: s
   if (!response) throw new ResumeUploadError("Hirist didn't upload the resume (no upload request was seen). Run `npm run resume:setup` again if this keeps happening.");
   if (!response.ok()) throw new ResumeUploadError(`Hirist answered ${response.status()} to the resume upload.`);
   await page.waitForTimeout(1_500);
+
+  if (setup.save) {
+    const savePattern = setup.savePath ? new RegExp(`^${setup.savePath}$`) : null;
+    const saving = watchUpload(page, (req) => /^(POST|PUT|PATCH)$/i.test(req.method()) && (savePattern ? savePattern.test(new URL(req.url()).pathname) : true), 20_000);
+    try {
+      await page.getByRole("button", { name: setup.save, exact: true }).or(page.getByText(setup.save, { exact: true })).filter({ visible: true }).first().click({ timeout: 8_000 });
+    } catch {
+      saving.stop();
+      throw new ResumeUploadError(`Couldn't find “${setup.save}” to save the new resume on Hirist. Run \`npm run resume:setup\` again.`);
+    }
+    const saved = await saving.done;
+    if (savePattern && !saved) throw new ResumeUploadError(`Hirist didn't save the new resume after “${setup.save}”.`);
+    if (saved && !saved.ok()) throw new ResumeUploadError(`Hirist answered ${saved.status()} when saving the new resume.`);
+    await page.waitForTimeout(1_500);
+  }
 }

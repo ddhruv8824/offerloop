@@ -25,8 +25,9 @@ await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "tailored")));
 writeFileSync(tailored, "%PDF-1.4 tailored for Acme");
 
 /** A fake Hirist profile: "Update Resume" opens a file picker; with `confirm`, a Save button sends it. */
-async function fakeHirist(page: Page, { confirm }: { confirm: boolean }) {
+async function fakeHirist(page: Page, { confirm, saveStep = false }: { confirm: boolean; saveStep?: boolean }) {
   const uploads: string[] = [];
+  const saves: number[] = [];
   await page.route("https://www.hirist.tech/**", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -34,6 +35,7 @@ async function fakeHirist(page: Page, { confirm }: { confirm: boolean }) {
         <button id="update" onclick="document.getElementById('f').click()">Update Resume</button>
         <input type="file" id="f" accept=".pdf,.doc" style="display:none">
         <div id="dialog" hidden><button id="save">Save</button></div>
+        <button id="savenext" onclick="fetch('https://gladiator.hirist.tech/api/profile/personal', { method: 'PUT', body: '{}' })">Save &amp; Next</button>
         <script>
           const send = async () => {
             const file = document.getElementById("f").files[0];
@@ -50,9 +52,11 @@ async function fakeHirist(page: Page, { confirm }: { confirm: boolean }) {
   await page.route("https://gladiator.hirist.tech/**", async (route) => {
     const req = route.request();
     if (req.url().endsWith("/resume")) uploads.push(req.postDataBuffer()?.toString("latin1") ?? "");
+    if (req.url().endsWith("/personal")) saves.push(Date.now());
     await route.fulfill({ contentType: "application/json", body: '{"ok":true}', headers: { "access-control-allow-origin": "*" } });
   });
-  return uploads;
+  void saveStep;
+  return Object.assign(uploads, { saves });
 }
 
 // Playwright's own Chromium, else your installed Chrome; skipped if neither can start.
@@ -64,22 +68,33 @@ if (!browser) {
   console.log("Profile resume upload: browser checks skipped (no headless Chrome available).");
   process.exit(0);
 }
-for (const confirm of [false, true]) {
+for (const [confirm, saveStep] of [[false, false], [true, false], [false, true]] as const) {
   const page = await browser.newPage();
-  const uploads = await fakeHirist(page, { confirm });
+  const uploads = await fakeHirist(page, { confirm, saveStep });
   const logs: string[] = [];
-  // The person: opens the profile, then clicks "Update Resume" (and Save, when asked).
+  const profileUrl = saveStep ? "https://www.hirist.tech/registration/addPersonalDetails" : "https://www.hirist.tech/profile";
+  let prompts = 0;
+  // The person: opens the profile, then clicks "Update Resume" (and Save, when asked; and
+  // "Save & Next" at step 3 on a page that needs it).
   const setup = await learnResumeUpload(
     page,
     main,
-    async () => void (await page.goto("https://www.hirist.tech/profile")),
+    async () => {
+      if (prompts++ === 0) await page.goto(profileUrl);
+      else if (saveStep) {
+        await page.click("#savenext");
+        await page.waitForTimeout(500);
+      }
+    },
     (line) => {
       logs.push(line);
       if (line.includes("Now click")) setTimeout(() => void page.click("#update"), 300);
       if (line.includes("Save / Upload / Confirm")) setTimeout(() => void page.click("#save"), 300);
     },
   );
-  expect(setup.pageUrl === "https://www.hirist.tech/profile", "remembers the page");
+  expect(setup.pageUrl === profileUrl, "remembers the page");
+  expect((setup.save === "Save & Next") === saveStep, `remembers the save button only when used (${setup.save})`);
+  expect(!saveStep || setup.savePath === "/api/profile/personal", `remembers the save request (${setup.savePath})`);
   expect(setup.trigger === "Update Resume", `remembers the button (${setup.trigger})`);
   expect((setup.confirm === "Save") === confirm, `remembers the confirm button only when needed (${setup.confirm})`);
   expect(new RegExp(`^${setup.uploadPath}$`).test("/api/user/5501/resume"), `remembers the upload request (${setup.uploadPath})`);
@@ -90,6 +105,7 @@ for (const confirm of [false, true]) {
   expect(uploads.length === 2 && uploads[1]!.includes("tailored for Acme"), "uploaded the tailored resume");
   await uploadResume(page, setup, main);
   expect(uploads.length === 3 && uploads[2]!.includes("main resume"), "put the main resume back");
+  expect(uploads.saves.length === (saveStep ? 3 : 0), `pressed Save & Next after each upload (${uploads.saves.length})`);
   await page.close();
 }
 
