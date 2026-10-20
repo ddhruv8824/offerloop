@@ -84,9 +84,11 @@ export const ACTIONS: ActionDef[] = [
     id: "resume.tailor",
     tool: "resume",
     title: "Tailor my resume",
-    description: "Create a tailored resume version for each job. Edits wait for your review.",
+    description:
+      "Tailor your Resume Studio resume to each job's description with your AI key, and save each one as a version to review and download. Put it after “Wait for my approval” to tailor only the jobs you approve.",
     needs: ["job"],
     produces: ["resume"],
+    settings: [{ key: "max", label: "At most", type: "number", default: 5, suffix: "resumes" }],
   },
   {
     id: "resume.cover",
@@ -249,7 +251,25 @@ export interface WorkflowRun {
   /** Jobs the run wants on the Tracker; the browser adds them and reports back. */
   trackerJobIds?: string[];
   trackerApplied?: boolean;
+  /** Resumes the "Tailor my resume" step made, one per job (see /automations/runs/<id>/resumes). */
+  tailored?: TailoredResume[];
   error?: string;
+}
+
+export interface TailoredResume {
+  jobId: string;
+  title: string;
+  company: string;
+  url: string;
+  status: "done" | "failed";
+  /** The Resume Studio version it was saved as. */
+  versionId?: string;
+  atsBefore?: number;
+  atsAfter?: number;
+  changes?: number;
+  /** Why it failed, or a note (e.g. the posting had only a short description). */
+  message?: string;
+  at: string;
 }
 
 export function newUid() {
@@ -283,7 +303,7 @@ export const TEMPLATES: {
     name: "Apply on Hirist",
     description: "Every morning: find Hirist jobs, check pay & culture, tailor your resume — then apply to the ones you approve.",
     trigger: { kind: "daily", time: "09:00" },
-    actions: ["jobs.find", "companies.insights", "resume.tailor", "workflow.approval", "hirist.apply", "tracker.add", "workflow.summary"],
+    actions: ["jobs.find", "companies.insights", "workflow.approval", "resume.tailor", "hirist.apply", "tracker.add", "workflow.summary"],
     // Only Hirist jobs can be applied to by the agent; career-page jobs would just pile up for approval.
     settings: { "jobs.find": { source: "Hirist only", newTools: "Don't count — add to Learn" } },
   },
@@ -292,7 +312,7 @@ export const TEMPLATES: {
     name: "Daily job hunt",
     description: "Every morning: find fitting jobs, check pay & culture, tailor your resume, and wait for you.",
     trigger: { kind: "daily", time: "09:00" },
-    actions: ["jobs.find", "companies.insights", "resume.tailor", "workflow.approval", "tracker.add", "workflow.summary"],
+    actions: ["jobs.find", "companies.insights", "workflow.approval", "resume.tailor", "tracker.add", "workflow.summary"],
   },
   {
     id: "one-job",

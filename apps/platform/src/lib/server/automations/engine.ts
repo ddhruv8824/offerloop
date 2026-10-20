@@ -10,7 +10,9 @@ import { approvalMessage, shortApprovalMessage } from "@/lib/approval-message";
 import { addToLearn } from "@/lib/learn";
 import { LINK_TTL_MS, linkHash, makeApprovalLinks, type MadeLinks } from "@/lib/server/approval-links";
 import { sendAndRecord, signalCreds, type SignalCreds, type SignalResult } from "@/lib/server/notify/signal";
-import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
+import { ACTION_BY_ID, newUid, type RunJob, type RunStep, type TailoredResume, type WorkflowRun, type WorkflowStep } from "@/lib/workflow-defs";
+import { NoResumeError, tailorForJob, type LlmConfig } from "@offerloop/resume-studio/server";
+import { automationLlm } from "../ai-key";
 import { bandPosition, recommendAsk, type MarketRange } from "@/lib/salary";
 import { ImportError, importJob } from "../jobs/import";
 import { salaryMarket } from "../jobs/market";
@@ -25,7 +27,10 @@ interface StepOutcome {
 }
 
 interface StepContext {
+  uid: string;
   run: WorkflowRun;
+  /** The AI key the person saved for automations (or the server's), if any. */
+  llm: LlmConfig | null;
   profile?: SearchProfile;
   seenJobIds: string[];
   /** Hirist ids already in the apply queue (waiting, applying, applied, needing you…). */
@@ -63,7 +68,6 @@ export const activeJobs = (run: WorkflowRun) => (run.approvedJobIds ? run.jobs.f
 // Tools that exist but can't be driven by the server yet. Said plainly rather than faked.
 const NOT_CONNECTED: Record<string, string> = {
   "companies.research": "Skipped: Company Intel is coming soon. Remove this step from the workflow.",
-  "resume.tailor": "Skipped: tailoring needs your AI key and your review, so do it in Resume Studio for the jobs you keep.",
   "resume.cover": "Skipped: cover letters aren't built yet.",
   "interview.mock": "Skipped: Interview Coach is coming soon. Remove this step from the workflow.",
 };
@@ -231,6 +235,9 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
       };
     }
 
+    case "resume.tailor":
+      return tailorResumes(ctx, Math.max(1, Math.min(10, Number(settings.max ?? 5))));
+
     case "dsa.questions": {
       if (!jobs.length) return { status: "skipped", message: "No jobs to prepare for." };
       const companies = [...new Set(jobs.map((j) => j.company))];
@@ -245,6 +252,8 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
       } else {
         parts.push(`Found ${plural(run.jobs.length, "job")}.`);
         if (run.approvedJobIds) parts.push(jobs.length ? `You approved ${jobs.length}.` : "You approved none of them.");
+        const tailored = run.tailored?.filter((t) => t.status === "done").length ?? 0;
+        if (tailored) parts.push(`${tailored} tailored ${tailored === 1 ? "resume is" : "resumes are"} ready to review.`);
         const tracked = run.trackerJobIds?.length ?? 0;
         if (tracked) parts.push(`${tracked} ${tracked === 1 ? "was" : "were"} added to your Tracker.`);
       }
@@ -259,6 +268,105 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
   }
 }
 
+/* ── Tailoring ────────────────────────────────────────── */
+
+/** Longest a single resume may take before it's given up on. */
+const ONE_RESUME_LIMIT_MS = 5 * 60_000;
+
+/** The posting's full description, read from its page (Hirist and the job boards' APIs). */
+async function jobDescription(job: RunJob): Promise<string> {
+  let description = "";
+  try {
+    description = (await importJob(job.url)).description?.trim() ?? "";
+  } catch (err) {
+    console.warn(`[automations] couldn't read the description of ${job.url}:`, err instanceof Error ? err.message : err);
+  }
+  return description;
+}
+
+/**
+ * Tailor the resume saved in Resume Studio to each job (the approved ones, after "Wait for my
+ * approval"), one at a time. Each result is saved as soon as it's ready, so a restart carries
+ * on from the next job; a job that fails doesn't stop the others, and the run goes on to
+ * apply either way.
+ */
+async function tailorResumes(ctx: StepContext, max: number): Promise<StepOutcome> {
+  const { run, uid, llm } = ctx;
+  const approvalLater = run.steps.slice(run.cursor + 1).some((s) => s.actionId === "workflow.approval");
+  if (approvalLater && run.jobs.length > 1) {
+    return {
+      status: "skipped",
+      message: "Skipped: this step comes before “Wait for my approval”. Edit the workflow and move “Tailor my resume” below it, so only the jobs you approve are tailored.",
+    };
+  }
+  if (!llm) return { status: "skipped", message: "Skipped: add your AI key on the Automations page (“AI for tailoring”) first." };
+
+  const done = new Set((run.tailored ?? []).filter((t) => t.status === "done").map((t) => t.jobId));
+  const jobs = activeJobs(run).slice(0, max);
+  const todo = jobs.filter((j) => !done.has(j.id));
+  let made = jobs.length - todo.length;
+  const failures: string[] = [];
+
+  /** Save one result on the run right away; false if the run was cancelled meanwhile. */
+  const save = (item: TailoredResume, progress: string) =>
+    updateStore(uid, (d) => {
+      const r = d.runs.find((x) => x.id === run.id);
+      if (!r || r.status !== "running") return false;
+      r.tailored = [...(r.tailored ?? []).filter((t) => t.jobId !== item.jobId), item];
+      const state = r.steps[run.cursor];
+      if (state?.status === "running") state.message = progress;
+      return true;
+    });
+
+  for (const [i, job] of todo.entries()) {
+    const base = { jobId: job.id, title: job.title, company: job.company, url: job.url, at: new Date().toISOString() };
+    let item: TailoredResume;
+    const description = await jobDescription(job);
+    if (description.length < 80) {
+      item = { ...base, status: "failed", message: "Couldn't read this posting's description, so there was nothing to tailor to." };
+    } else {
+      const jdText = `${job.title} at ${job.company}${job.location ? ` (${job.location})` : ""}\n\n${description}`;
+      try {
+        let result;
+        try {
+          result = await tailorForJob(llm, uid, { jdText, title: job.title, company: job.company, url: job.url }, { signal: AbortSignal.timeout(ONE_RESUME_LIMIT_MS) });
+        } catch (err) {
+          // Free AI plans allow only a few requests a minute: wait once, then try again.
+          if (!(err instanceof Error && /rate limit|quota/i.test(err.message))) throw err;
+          await new Promise((r) => setTimeout(r, 60_000));
+          result = await tailorForJob(llm, uid, { jdText, title: job.title, company: job.company, url: job.url }, { signal: AbortSignal.timeout(ONE_RESUME_LIMIT_MS) });
+        }
+        made++;
+        item = {
+          ...base,
+          status: "done",
+          versionId: result.versionId,
+          atsBefore: result.atsBefore,
+          atsAfter: result.atsAfter,
+          changes: result.changes,
+          message: description.length < 400 ? "The posting's description was short, so there was less to tailor to." : undefined,
+        };
+      } catch (err) {
+        if (err instanceof NoResumeError) return { status: "skipped", message: `Skipped: ${err.message}` };
+        const reason = err instanceof Error ? err.message : String(err);
+        item = { ...base, status: "failed", message: reason.slice(0, 300) };
+      }
+    }
+    if (item.status === "failed") failures.push(item.message ?? "failed");
+    const progress = `Tailored ${made} of ${jobs.length}${i + 1 < todo.length ? "… working on the next one" : ""}.`;
+    if (!(await save(item, progress))) return { status: "skipped", message: "Stopped: the run was cancelled." };
+  }
+
+  const failed = failures.length;
+  return {
+    status: "done",
+    message:
+      `Tailored ${plural(made, "resume")} to ${made === 1 ? "its job's" : "their jobs'"} descriptions` +
+      (failed ? `; ${failed} couldn't be tailored (${failures[0].replace(/\.$/, "")})` : "") +
+      ". Open “Tailored resumes” on this run to compare each one with its job.",
+  };
+}
+
 /* ── Run lifecycle ────────────────────────────────────── */
 
 const finish = (run: WorkflowRun, status: WorkflowRun["status"], error?: string) => {
@@ -269,6 +377,8 @@ const finish = (run: WorkflowRun, status: WorkflowRun["status"], error?: string)
 
 /** No step should take this long; if one does, it fails with a message instead of spinning. */
 const STEP_TIME_LIMIT_MS = 6 * 60_000;
+/** Tailoring makes several AI calls per resume, one resume at a time (see tailorResumes). */
+const TAILOR_TIME_LIMIT_MS = 30 * 60_000;
 
 function withTimeLimit<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -314,7 +424,17 @@ async function advanceSteps(uid: string, runId: string): Promise<void> {
       state.startedAt = new Date().toISOString();
       const workflow = data.workflows.find((w) => w.id === run.workflowId);
       const step: WorkflowStep = workflow?.steps.find((s) => s.uid === state.uid) ?? { uid: state.uid, actionId: state.actionId, settings: {} };
+      let llm: LlmConfig | null = null;
+      if (step.actionId === "resume.tailor") {
+        try {
+          llm = automationLlm(data);
+        } catch (err) {
+          console.warn("[automations] couldn't read the AI key:", err instanceof Error ? err.message : err);
+        }
+      }
       const ctx: StepContext = {
+        uid,
+        llm,
         run: structuredClone(run),
         profile: data.profile,
         seenJobIds: [...(data.seenJobs[run.workflowId] ?? [])],
@@ -332,7 +452,7 @@ async function advanceSteps(uid: string, runId: string): Promise<void> {
       outcome =
         needsJobs && !activeJobs(claim.ctx.run).length
           ? { status: "skipped", message: "No jobs to work on." }
-          : await withTimeLimit(runStep(claim.step, claim.ctx), STEP_TIME_LIMIT_MS);
+          : await withTimeLimit(runStep(claim.step, claim.ctx), claim.step.actionId === "resume.tailor" ? TAILOR_TIME_LIMIT_MS : STEP_TIME_LIMIT_MS);
     } catch (err) {
       failure = err instanceof StepFailure ? err.message : "This step hit an unexpected error.";
       if (!(err instanceof StepFailure)) console.error(`[automations] ${claim.step.actionId} failed:`, err);

@@ -116,10 +116,13 @@ export function resolveConfig(provider?: string | null, model?: string | null, a
 
 // ── Asking for structured output ──────────────────────────────────────────────
 
+/** Gemini's API address; GEMINI_BASE_URL points it elsewhere (a proxy or gateway). */
+const geminiBase = () => (process.env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "");
+
 function languageModel(cfg: LlmConfig): LanguageModel {
   switch (cfg.provider) {
     case "gemini":
-      return createGoogleGenerativeAI({ apiKey: cfg.apiKey })(cfg.model);
+      return createGoogleGenerativeAI({ apiKey: cfg.apiKey, baseURL: geminiBase() })(cfg.model);
     case "openai":
       return createOpenAI({ apiKey: cfg.apiKey })(cfg.model);
     case "anthropic":
@@ -245,7 +248,7 @@ export async function listModels(cfg: LlmConfig): Promise<string[]> {
           models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
           nextPageToken?: string;
         }>(
-          `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+          `${geminiBase()}/models?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
           { "x-goog-api-key": cfg.apiKey },
         );
         for (const m of page.models ?? []) {

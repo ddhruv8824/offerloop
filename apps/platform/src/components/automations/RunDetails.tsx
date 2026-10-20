@@ -1,6 +1,7 @@
 "use client";
 
-import { Ban, Check, CircleDashed, Hand, Loader2, SkipForward, X } from "lucide-react";
+import Link from "next/link";
+import { Ban, Check, CircleDashed, FileText, Hand, Loader2, SkipForward, X } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { ACTION_BY_ID, type RunStatus, type StepStatus, type WorkflowRun } from "@/lib/workflows";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,15 @@ export function RunDetails({ run }: { run: WorkflowRun }) {
           );
         })}
       </ol>
+
+      {(run.tailored?.length ?? 0) > 0 && (
+        <Link
+          href={`/automations/runs/${run.id}/resumes`}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-coral/40 bg-coral-wash/50 px-3 py-1.5 text-sm font-semibold text-coral-strong hover:bg-coral-wash"
+        >
+          <FileText className="size-4" aria-hidden /> Tailored resumes ({run.tailored!.filter((t) => t.status === "done").length} of {run.tailored!.length}): compare each with its job
+        </Link>
+      )}
 
       {run.status === "cancelled" && run.error && (
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">

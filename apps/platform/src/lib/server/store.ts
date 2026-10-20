@@ -32,6 +32,8 @@ export interface StoreData {
   learning: LearnItem[];
   /** Signal alerts: CallMeBot account id and key (the key encrypted, see secret-box.ts). */
   signal?: { phone: string; keyBox: string; savedAt: string };
+  /** The AI key automations tailor resumes with (the key encrypted, see secret-box.ts). */
+  ai?: { provider: string; model: string; keyBox: string; savedAt: string };
   /** How the last Signal message went (shown on the Automations page). */
   signalLast?: SignalResult;
   /** One-tap approve/skip links sent in Signal messages (hashes only). */

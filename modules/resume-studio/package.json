@@ -9,7 +9,8 @@
     ".": "./src/index.tsx",
     "./server": "./src/server/index.ts",
     "./styles.css": "./src/styles.css",
-    "./llm": "./src/lib/tailor/llm.ts"
+    "./llm": "./src/lib/tailor/llm.ts",
+    "./review": "./src/review.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

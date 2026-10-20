@@ -11,3 +11,7 @@ export { writeStudyNotes, type StudyNotesOutput } from "./study-notes";
 export { resolveConfig, LlmConfigError, type LlmConfig } from "./models";
 /** Copy one workspace into another (moving a browser's workspace into its owner's account). */
 export { copyWorkspace } from "./store";
+/** Tailor the saved resume to a job without the browser (automations), and read the result. */
+export { tailorForJob, readTailoredVersion, NoResumeError, type JobToTailor, type AutoTailorResult } from "./auto-tailor";
+/** Whether an AI key works (lists the models it can use). */
+export { listModels, PROVIDERS, type ProviderId } from "./models";

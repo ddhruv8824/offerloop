@@ -545,3 +545,42 @@ test("a pinned workspace ignores the one the browser asks for", async () => {
   // Another workspace's run log isn't reachable.
   assert.equal((await pinned("GET", "/api/v1/tailor/threads/victim:chat/history")).status, 404);
 });
+
+test("an automation tailors the saved resume to a job and saves it as a version", async () => {
+  const { tailorForJob, readTailoredVersion, NoResumeError } = await import("../src/server/auto-tailor");
+  const plan = {
+    summary: { after: "Python developer shipping APIs on AWS.", reason: "r" },
+    changes: [{ op: "rewrite_bullet", item_id: "exp1", bullet_id: "exp1_b1", after: "Built APIs in Python on AWS", reason: "r", keywords_added: ["AWS"] }],
+    gaps: [{ skill: "Kubernetes", question: "Used Kubernetes?" }],
+  };
+  const { ask } = fakeAsk(
+    new Map<unknown, object[]>([
+      [JDAnalysis, [PIPE_JD]],
+      [TailorPlan, [plan]],
+      [TailorReview, [{ notes: ["Solid Python backend fit."], verdicts: [], additions: [] }]],
+    ]),
+  );
+  const job = { jdText: "Backend Engineer at Beta. Python, AWS, Kubernetes. ".repeat(10), title: "Backend Engineer", company: "Beta", url: "https://example.com/job/1" };
+
+  // Nothing to tailor until a resume is saved.
+  await assert.rejects(tailorForJob(LLM, "auto1", job, { ask }), NoResumeError);
+
+  await store.saveResumeAndProfile("auto1", PIPE_RESUME, PIPE_MASTER);
+  const result = await tailorForJob(LLM, "auto1", job, { ask });
+  assert.equal(result.label, "Beta — Backend Engineer");
+  assert.ok(result.atsAfter > result.atsBefore);
+  assert.equal(result.changes, 2);
+
+  // Saved like a version made by hand: it shows in Resume Studio's list.
+  const versions = await store.listVersions("auto1");
+  assert.deepEqual(versions.map((v) => v.id), [result.versionId]);
+  const saved = await readTailoredVersion("auto1", result.versionId);
+  assert.equal(saved?.version.origin, "automation");
+  assert.equal(saved?.version.job_url, "https://example.com/job/1");
+  assert.equal(saved?.version.jd_text, job.jdText);
+  assert.equal(saved?.resume.summary.text, "Python developer shipping APIs on AWS.");
+  assert.equal(saved?.resume.experience[0].bullets[0].text, "Built APIs in Python on AWS");
+  // The original resume is untouched.
+  assert.equal((await store.loadWorkspace("auto1")).current_resume?.summary.text, "Backend developer with Python.");
+  assert.ok(!(await savedData()).includes(SECRET));
+});

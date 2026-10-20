@@ -202,6 +202,9 @@ export function Workspace({ workspace, embedded = false }: WorkspaceProps) {
         setCurrentResume(ws.current_resume);
         setMasterProfile(ws.master_profile);
         setVersionMetas(ws.versions);
+        // ?version=<id> (e.g. from an automation's "Edit in Resume Studio") opens that version.
+        const wanted = new URLSearchParams(window.location.search).get("version");
+        if (wanted && ws.versions.some((v) => v.id === wanted)) setOpenOnLoad(wanted);
         if (ws.current_resume) {
           say(
             `Welcome back. Your resume is loaded (${resumeStats(ws.current_resume)}).` +
@@ -267,6 +270,15 @@ export function Workspace({ workspace, embedded = false }: WorkspaceProps) {
         .flatMap(highlightIdsFor),
     );
   }, [activeId, versions]);
+
+  const [openOnLoad, setOpenOnLoad] = useState<string | null>(null);
+  useEffect(() => {
+    if (!openOnLoad || loading) return;
+    setOpenOnLoad(null);
+    void selectVersion(openOnLoad);
+    // selectVersion is recreated each render; this runs once per requested version.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOnLoad, loading]);
 
   const selectVersion = async (id: string) => {
     if (id === ORIGINAL) {

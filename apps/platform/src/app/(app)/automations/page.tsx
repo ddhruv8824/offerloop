@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { AlertTriangle, CalendarClock, Clock, Loader2, Pencil, Play, Plus, Square, Trash2, Workflow as WorkflowIcon } from "lucide-react";
+import { AiKeyCard } from "@/components/automations/AiKeyCard";
 import { ApprovalCard } from "@/components/automations/ApprovalCard";
 import { HiristAgentCard } from "@/components/automations/HiristAgentCard";
 import { SignalCard } from "@/components/automations/SignalCard";
@@ -88,6 +89,7 @@ export default function Automations() {
       {/* The job agent that applies on Hirist from the user's PC */}
       {ready && <HiristAgentCard agent={agent} queue={applyQueue} />}
       {ready && <SignalCard waitingRunId={waiting[0]?.id} />}
+      {ready && <AiKeyCard />}
 
       {/* Recent runs */}
       {runs.length > 0 && (

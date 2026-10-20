@@ -206,6 +206,10 @@ export interface ResumeVersion {
   /** The tailoring run that produced this version (see TailorResult.thread_id). */
   thread_id?: string;
   review?: TailorReviewSummary;
+  /** The posting's link, for versions an automation made. */
+  job_url?: string;
+  /** "automation" when a workflow made it; made by hand otherwise. */
+  origin?: "automation";
 }
 
 export type VersionMeta = Pick<ResumeVersion, "id" | "label" | "company" | "role_title" | "created_at" | "updated_at">;

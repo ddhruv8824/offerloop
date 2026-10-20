@@ -36,6 +36,10 @@ Then review each edit card: **Accept**, **Reject**, or click it to see it on the
 
 Each job description gets its own **version**, saved to your account. Download any version as a PDF.
 
+## From an automation
+
+A workflow with **Tailor my resume** tailors this resume to every job you approve and saves each one as a version here, while the tab is closed. See [Tailored resumes](/docs/automations#tailored-resumes).
+
 ## Chat
 
 Ask for changes in plain words: *"make the Stripe bullets punchier"*, *"what's missing for this job?"*, *"put Kafka first in skills"*. The same honesty rules apply.
