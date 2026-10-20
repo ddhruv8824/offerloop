@@ -122,6 +122,10 @@ Good to know:
 - Pause or change it in **Task Scheduler** (Start menu → Task Scheduler → Task Scheduler
   Library → Offerloop Hirist agent), or remove it: double-click `uninstall-schedule.cmd`.
 
+### Apply with each job's tailored resume (optional)
+
+Run `npm run resume:setup` once: open your Hirist profile page in the agent's Chrome, press Enter, then click your resume's upload button. After that the agent uploads each job's tailored resume to your Hirist profile before applying and puts your main resume (`OFFERLOOP_MAIN_RESUME`, else your Resume Studio resume) back afterwards. `OFFERLOOP_TAILORED_RESUMES=off` turns it off. Full guide: Offerloop's `/docs/hirist-agent`.
+
 ## When something's off
 
 | Message | Fix |

@@ -20,7 +20,9 @@ import { ensureHiristAuthenticated, isHiristAuthenticated, preflightHiristAuthen
 import { connectToChrome } from "../hirist/browser.js";
 import { mapJobDetail } from "../hirist/getJobDetails.js";
 import type { Page } from "playwright";
+import { loadSetup, uploadResume } from "../hirist/profileResume.js";
 import { createOfferloopClient, OfferloopError } from "./client.js";
+import { mainResumeFile, tailoredResumeFile } from "./resumeFiles.js";
 import { runConnectOnce } from "./connect.js";
 import { clearProblemNotice, noticeProblem, runNotice, showNotice } from "./notify.js";
 
@@ -62,6 +64,15 @@ const ready = async () => {
 };
 
 const offerloop = createOfferloopClient(url, key);
+
+// Tailored resumes: once `npm run resume:setup` has run (OFFERLOOP_TAILORED_RESUMES=off turns it off).
+const resumeSetup = process.env.OFFERLOOP_TAILORED_RESUMES?.trim().toLowerCase() === "off" ? null : await loadSetup();
+const resumeSwap = resumeSetup
+  ? {
+      put: async (job: { id: string }) => uploadResume(await ready(), resumeSetup, await tailoredResumeFile(offerloop, job.id)),
+      restore: async () => uploadResume(await ready(), resumeSetup, await mainResumeFile(offerloop)),
+    }
+  : undefined;
 const automationsUrl = `${url.replace(/\/+$/, "")}/automations`;
 // 45–120 seconds between applications.
 const pause = () => sleep(45_000 + Math.floor(Math.random() * 75_000));
@@ -78,6 +89,7 @@ async function once() {
         return mapJobDetail({ jobId: job.hiristId, title: job.title, company: job.company, location: job.location ?? "", jobUrl: job.url }, raw);
       },
       apply: async (job, dry) => applyToHiristJob(await ready(), job, dry),
+      resume: resumeSwap,
       pause,
       log: (line) => console.log(line),
     },
@@ -120,6 +132,7 @@ async function tellOfferloop(problem: string | null) {
 console.log(
   `Offerloop job agent — ${url}${dryRun ? " (dry run: nothing will be submitted)" : ""}${scheduled ? ` (scheduled run, ${new Date().toLocaleString()})` : ""}`,
 );
+console.log(resumeSwap ? "Tailored resumes: on (each job's tailored resume goes on your Hirist profile before applying)." : "Tailored resumes: off (run `npm run resume:setup` to turn them on).");
 try {
   for (;;) {
     const summary = await once();

@@ -42,7 +42,8 @@
     "daily:test": "tsx src/scheduler/checkDailyAgent.ts",
     "runs": "tsx src/db/showAgentRuns.ts",
     "connect": "tsx src/offerloop/runConnect.ts",
-    "connect:test": "tsx src/offerloop/checkConnect.ts",
+    "connect:test": "tsx src/offerloop/checkConnect.ts && tsx src/hirist/checkProfileResume.ts",
+    "resume:setup": "tsx src/offerloop/resumeSetup.ts",
     "notify:test": "tsx src/offerloop/testNotify.ts"
   },
   "dependencies": {

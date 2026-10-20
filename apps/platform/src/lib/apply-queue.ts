@@ -42,6 +42,8 @@ export interface ApplyItem {
   claimedAt?: string;
   /** The browser has put the result on the Tracker. */
   trackerSynced?: boolean;
+  /** The resume tailored to this job: the agent puts it on your Hirist profile before applying. */
+  resumeVersionId?: string;
 }
 
 export interface QueueJob {
@@ -51,6 +53,8 @@ export interface QueueJob {
   location?: string;
   url: string;
   source: string;
+  /** The Resume Studio version tailored to this job, when a workflow made one. */
+  resumeVersionId?: string;
 }
 
 /** Hirist's numeric id from Offerloop's job id ("Hirist:123") or the job URL (".../j/slug-123"). */
@@ -104,6 +108,7 @@ export function enqueue(
       url: job.url,
       runId: run.id,
       workflowName: run.workflowName,
+      ...(job.resumeVersionId ? { resumeVersionId: job.resumeVersionId } : {}),
       status: "queued",
       queuedAt: at,
       updatedAt: at,

@@ -15,3 +15,5 @@ export { copyWorkspace } from "./store";
 export { tailorForJob, readTailoredVersion, NoResumeError, type JobToTailor, type AutoTailorResult } from "./auto-tailor";
 /** Whether an AI key works (lists the models it can use). */
 export { listModels, PROVIDERS, type ProviderId } from "./models";
+/** The saved resume itself (the one tailoring starts from). */
+export { loadWorkspace } from "./store";

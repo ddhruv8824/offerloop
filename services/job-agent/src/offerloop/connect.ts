@@ -57,6 +57,12 @@ export type ConnectDeps = {
   /** Fresh details for one Hirist job, or null if it's gone. */
   details: (job: QueuedJob) => Promise<DetailedJob | null>;
   apply: (job: DetailedJob, dryRun: boolean) => Promise<ApplyResult>;
+  /**
+   * Swapping resumes on your Hirist profile (Hirist's Apply sends the profile's resume):
+   * `put` uploads the resume tailored to a job, `restore` puts your main resume back.
+   * Absent when it isn't set up (`npm run resume:setup`): jobs go with your profile resume.
+   */
+  resume?: { put: (job: QueuedJob) => Promise<void>; restore: () => Promise<void> };
   /** Pause between applications, so it looks like a person, not a script. */
   pause: () => Promise<void>;
   log: (line: string) => void;
@@ -87,45 +93,111 @@ export async function runConnectOnce(deps: ConnectDeps, { dryRun }: { dryRun: bo
   await deps.ensureReady();
 
   const batch = dryRun ? (await offerloop.take(hello.remainingToday)).jobs : [];
-  for (let first = true; ; first = false) {
-    const job = dryRun ? batch.shift() : (await offerloop.take(1)).jobs[0];
-    if (!job) break;
-    if (!first && !dryRun) await deps.pause();
-    log(`\n→ ${job.title} — ${job.company}\n  ${job.url}`);
+  // True while your Hirist profile holds a tailored resume instead of your main one.
+  let swapped = false;
+  const restore = async () => {
+    if (!swapped || !deps.resume) return;
+    await deps.resume.restore();
+    swapped = false;
+    log("  Put your main resume back on your Hirist profile.");
+  };
+  try {
+    for (let first = true; ; first = false) {
+      const job = dryRun ? batch.shift() : (await offerloop.take(1)).jobs[0];
+      if (!job) break;
+      if (!first && !dryRun) await deps.pause();
+      log(`\n→ ${job.title} — ${job.company}\n  ${job.url}`);
 
-    let outcome: Outcome;
-    try {
-      const detailed = await deps.details(job);
-      if (!detailed) outcome = { status: "failed", message: "Hirist says this job is gone or unavailable." };
-      else if (detailed.applicationType !== "HIRIST_DIRECT") {
+      let outcome: Outcome;
+      try {
+        const detailed = await deps.details(job);
+        if (!detailed) outcome = { status: "failed", message: "Hirist says this job is gone or unavailable." };
+        else if (detailed.applicationType !== "HIRIST_DIRECT") {
+          outcome = {
+            status: "skipped",
+            message: detailed.externalApplicationUrl
+              ? `Applied for on the company's site: ${detailed.externalApplicationUrl}`
+              : `Not a one-click Hirist job (${detailed.applicationLabel ?? detailed.applicationType}).`,
+          };
+        } else {
+          const resume = dryRun ? { use: "profile" as const } : await chooseResume(job);
+          if (resume.use === "stop") outcome = { status: "requeue", message: "Put back: your Hirist resume couldn't be set.", stop: resume.why };
+          else {
+            outcome = outcomeOf(await deps.apply(detailed, dryRun));
+            if (outcome.status === "applied" || outcome.status === "needs_input") outcome.message += resumeNote(resume);
+          }
+        }
+      } catch (error) {
+        // We can't tell whether Apply was clicked: let the person check rather than retry blindly.
         outcome = {
-          status: "skipped",
-          message: detailed.externalApplicationUrl
-            ? `Applied for on the company's site: ${detailed.externalApplicationUrl}`
-            : `Not a one-click Hirist job (${detailed.applicationLabel ?? detailed.applicationType}).`,
+          status: "needs_input",
+          message: `Something went wrong mid-way (${error instanceof Error ? error.message.slice(0, 120) : error}) — check the job on Hirist.`,
         };
-      } else outcome = outcomeOf(await deps.apply(detailed, dryRun));
-    } catch (error) {
-      // We can't tell whether Apply was clicked: let the person check rather than retry blindly.
-      outcome = {
-        status: "needs_input",
-        message: `Something went wrong mid-way (${error instanceof Error ? error.message.slice(0, 120) : error}) — check the job on Hirist.`,
-      };
+      }
+
+      await offerloop.report(job.id, outcome.status, outcome.message);
+      summary.done++;
+      summary.byStatus[outcome.status] = (summary.byStatus[outcome.status] ?? 0) + 1;
+      summary.results.push({ title: job.title, company: job.company, status: outcome.status });
+      log(`  ${outcome.status.replace("_", " ")}: ${outcome.message}`);
+
+      if (outcome.stop) {
+        summary.stoppedBecause = outcome.stop;
+        // Put back anything already taken in this pass.
+        for (const rest of batch.splice(0)) await offerloop.report(rest.id, "requeue", "Put back: the agent stopped.");
+        log(`\nStopped: ${outcome.stop}`);
+        break;
+      }
     }
-
-    await offerloop.report(job.id, outcome.status, outcome.message);
-    summary.done++;
-    summary.byStatus[outcome.status] = (summary.byStatus[outcome.status] ?? 0) + 1;
-    summary.results.push({ title: job.title, company: job.company, status: outcome.status });
-    log(`  ${outcome.status.replace("_", " ")}: ${outcome.message}`);
-
-    if (outcome.stop) {
-      summary.stoppedBecause = outcome.stop;
-      // Put back anything already taken in this pass.
-      for (const rest of batch.splice(0)) await offerloop.report(rest.id, "requeue", "Put back: the agent stopped.");
-      log(`\nStopped: ${outcome.stop}`);
-      break;
+  } finally {
+    // Never leave a job's tailored resume on your profile.
+    try {
+      await restore();
+    } catch (error) {
+      const why = `Your Hirist profile still has the last job's tailored resume: putting your main resume back failed (${error instanceof Error ? error.message : error}). Upload it on Hirist by hand.`;
+      summary.stoppedBecause ??= why;
+      log(`\n${why}`);
     }
   }
   return summary;
+
+  type ResumeChoice = { use: "tailored" } | { use: "profile"; note?: string } | { use: "stop"; why: string };
+
+  /** Which resume this job goes with, and get the profile ready for it. */
+  async function chooseResume(job: QueuedJob): Promise<ResumeChoice> {
+    if (job.tailoredResume && !deps.resume) {
+      return { use: "profile", note: "Its tailored resume wasn't used: run `npm run resume:setup` on your PC to apply with tailored resumes." };
+    }
+    if (!deps.resume) return { use: "profile" };
+    if (job.tailoredResume) {
+      try {
+        await deps.resume.put(job);
+        swapped = true;
+        log("  Put the resume tailored to this job on your Hirist profile.");
+        return { use: "tailored" };
+      } catch (error) {
+        const why = error instanceof Error ? error.message : String(error);
+        log(`  Couldn't put the tailored resume on Hirist: ${why}`);
+        // The profile may still hold another job's resume: put the main one back first.
+        try {
+          await restore();
+        } catch (restoreError) {
+          return { use: "stop", why: `Couldn't set your resume on Hirist (${restoreError instanceof Error ? restoreError.message : restoreError}). Check your Hirist profile's resume, then rerun.` };
+        }
+        return { use: "profile", note: `Its tailored resume couldn't be uploaded (${why.slice(0, 120)}), so it went with your profile resume.` };
+      }
+    }
+    // No tailored resume for this job: make sure your main one is on the profile.
+    try {
+      await restore();
+    } catch (error) {
+      return { use: "stop", why: `Couldn't put your main resume back on Hirist (${error instanceof Error ? error.message : error}). Check your Hirist profile's resume, then rerun.` };
+    }
+    return { use: "profile" };
+  }
+}
+
+function resumeNote(choice: { use: string; note?: string }): string {
+  if (choice.use === "tailored") return " Sent with the resume tailored to this job.";
+  return "note" in choice && choice.note ? ` ${choice.note}` : "";
 }

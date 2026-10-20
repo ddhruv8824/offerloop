@@ -198,7 +198,9 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
       // The server can't use the user's Hirist login: approved jobs go to a queue that the
       // job agent on their PC works through, in their own logged-in Chrome.
       const max = Math.max(1, Math.min(DAILY_APPLY_LIMIT, Number(settings.max ?? DAILY_APPLY_LIMIT)));
-      const queueJobs = jobs.map((j) => ({ id: j.id, title: j.title, company: j.company, location: j.location, url: j.url, source: j.source }));
+      // Jobs "Tailor my resume" made a resume for: the agent applies with that one.
+      const tailoredFor = new Map((run.tailored ?? []).filter((t) => t.status === "done" && t.versionId).map((t) => [t.jobId, t.versionId!]));
+      const queueJobs = jobs.map((j) => ({ id: j.id, title: j.title, company: j.company, location: j.location, url: j.url, source: j.source, resumeVersionId: tailoredFor.get(j.id) }));
       return {
         status: "done",
         message: "Queued for your job agent.",
@@ -208,6 +210,7 @@ async function runStep(step: WorkflowStep, ctx: StepContext): Promise<StepOutcom
           if (result.added.length) {
             parts.push(
               `${plural(result.added.length, "Hirist job")} queued for your job agent` +
+                (result.added.some((a) => a.resumeVersionId) ? ` (${result.added.filter((a) => a.resumeVersionId).length} with their tailored resume)` : "") +
                 (data.agent ? "." : " — connect the agent on your PC (Automations → Hirist agent) to apply."),
             );
           } else {

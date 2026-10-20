@@ -44,7 +44,7 @@ Or click **New workflow** and build your own.
 
 Every tailored resume is also a version in Resume Studio's version list. A job whose description can't be read, or that hits the AI's rate limit twice, is marked "Couldn't tailor" with the reason; the others carry on, and so does the rest of the run.
 
-The Hirist agent applies with the resume on your Hirist profile; Hirist's Apply button doesn't take a different file per job. Use the tailored PDFs where you apply on a company's site, or send them to recruiters.
+With **Apply on Hirist** after *Tailor my resume*, the [Hirist agent](/docs/hirist-agent#apply-with-each-job-s-tailored-resume-optional) can apply to each job with its tailored resume (one-time setup on your PC). Use the PDFs too where you apply on a company's site, or send them to recruiters.
 
 ## Schedules
 

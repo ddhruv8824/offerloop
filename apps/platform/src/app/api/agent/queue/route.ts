@@ -18,7 +18,8 @@ export async function POST(req: Request) {
     const { items, remainingToday } = claim(data.applyQueue, { want });
     return {
       remainingToday,
-      jobs: items.map(({ id, hiristId, title, company, location, url }) => ({ id, hiristId, title, company, location, url })),
+      // tailoredResume: GET /api/agent/resume?item=<id> has a PDF tailored to this job.
+      jobs: items.map(({ id, hiristId, title, company, location, url, resumeVersionId }) => ({ id, hiristId, title, company, location, url, tailoredResume: Boolean(resumeVersionId) })),
     };
   });
   return Response.json(result);

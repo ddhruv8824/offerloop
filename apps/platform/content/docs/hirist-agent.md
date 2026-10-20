@@ -71,6 +71,28 @@ From then on it's hands-off:
 
 Check that notifications work: `npm run notify:test`.
 
+## Apply with each job's tailored resume (optional)
+
+Hirist's Apply sends the resume on your Hirist profile; there's no way to pick a file per application. So when a workflow has **Tailor my resume** before **Apply on Hirist**, the agent can put each job's tailored resume on your profile just before applying, and your main resume back afterwards.
+
+**Set it up once** (about 2 minutes), in a terminal in `services/job-agent`:
+
+1. *(Recommended)* In `.env`, point `OFFERLOOP_MAIN_RESUME` to your own resume PDF, e.g. `OFFERLOOP_MAIN_RESUME="C:\Users\you\Documents\DhruvCV.pdf"`. That's the file put back after each batch, and its name is the file name recruiters see. Without it, your Resume Studio resume is used.
+2. Run `npm run resume:setup`. The agent's Chrome opens.
+3. In that Chrome window, open your **Hirist profile page** (where your resume is), then press **Enter** in the terminal.
+4. Click your resume's **upload / update** button on that page. No file window opens: the agent hands Hirist your main resume, so your profile stays the same. If Hirist then shows a **Save** or **Confirm** button, click it.
+5. The agent repeats the upload by itself to check, and says **Done**.
+
+From then on, every run (by hand or in the background):
+
+- **A job with a tailored resume:** the agent uploads that resume to your Hirist profile, then applies. The result says "Sent with the resume tailored to this job."
+- **A job without one:** your main resume goes back on the profile first.
+- **After the batch** (or if anything goes wrong): your main resume goes back.
+- **If a tailored resume won't upload:** your main resume goes back and the job is applied to with it; the result says why.
+- **If your main resume can't be put back:** the agent stops instead of sending a job the wrong resume, and tells you on the Automations page.
+
+Your profile shows a tailored resume only for the minute or two around each application. To turn it off, set `OFFERLOOP_TAILORED_RESUMES=off` in `.env`. If Hirist changes its profile page and uploads start failing, run `npm run resume:setup` again.
+
 ## Day to day
 
 Approve jobs (in Offerloop or from [Signal](/docs/signal)) and the agent applies within about 15 minutes whenever your PC is on and you're logged in to Windows. The **Hirist agent** card on Automations shows:

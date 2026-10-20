@@ -10,7 +10,8 @@
     "./server": "./src/server/index.ts",
     "./styles.css": "./src/styles.css",
     "./llm": "./src/lib/tailor/llm.ts",
-    "./review": "./src/review.ts"
+    "./review": "./src/review.ts",
+    "./pdf": "./src/server/pdf.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

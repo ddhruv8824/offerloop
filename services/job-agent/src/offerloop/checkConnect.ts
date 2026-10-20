@@ -25,6 +25,7 @@ function fakeOfferloop(jobs: QueuedJob[], remainingToday = 15) {
     },
     report: async (id, status, message) => void reports.push({ id, status, message }),
     problem: async () => {},
+    resumePdf: async () => new Uint8Array(),
   };
   return { client, reports, takes: () => takes };
 }
@@ -125,6 +126,71 @@ expect(Boolean(outcomeOf({ status: "UNKNOWN", reason: "PROFILE_INCOMPLETE" }).st
   expect(runNotice({ results: [r("Acme", "requeue")] }) === null, "dry run → no pop-up");
   const many = runNotice({ results: ["A", "B", "C", "D", "E", "F"].map((c) => r(c, "applied")) });
   expect(many?.lines[0] === "Applied: A, B, C, D +2 more", `long list: ${many?.lines[0]}`);
+}
+
+// 8. Tailored resumes: each tailored job gets its own resume on the profile before Apply; a job
+//    without one gets the main resume back first; the main one is always back at the end.
+{
+  const tailored = (n: number): QueuedJob => ({ ...job(n), tailoredResume: true });
+  const q = fakeOfferloop([tailored(1), tailored(2), job(3), tailored(4)]);
+  const d = deps(q.client, { q1: { status: "APPLIED" }, q2: { status: "APPLIED" }, q3: { status: "APPLIED" }, q4: { status: "APPLIED" } });
+  const events: string[] = [];
+  const apply = d.apply;
+  d.apply = async (j, dry) => (events.push(`apply ${j.jobId}`), apply(j, dry));
+  d.resume = { put: async (j) => void events.push(`put ${j.id}`), restore: async () => void events.push("restore") };
+  const summary = await runConnectOnce(d, { dryRun: false });
+  expect(
+    events.join(", ") === "put q1, apply 1001, put q2, apply 1002, restore, apply 1003, put q4, apply 1004, restore",
+    `order: ${events.join(", ")}`,
+  );
+  expect(q.reports[0]!.message!.includes("tailored to this job") && !q.reports[2]!.message!.includes("tailored"), "the result says which resume went");
+  expect(!summary.stoppedBecause, "no stop");
+}
+
+// 9. A tailored resume that won't upload: main resume back, then apply with it, and say so.
+{
+  const q = fakeOfferloop([{ ...job(1), tailoredResume: true }, { ...job(2), tailoredResume: true }]);
+  const d = deps(q.client, { q1: { status: "APPLIED" }, q2: { status: "APPLIED" } });
+  const events: string[] = [];
+  d.resume = {
+    put: async (j) => {
+      if (j.id === "q2") throw new Error("Hirist answered 500");
+      events.push(`put ${j.id}`);
+    },
+    restore: async () => void events.push("restore"),
+  };
+  await runConnectOnce(d, { dryRun: false });
+  expect(events.join(", ") === "put q1, restore", `order: ${events.join(", ")}`);
+  expect(q.reports[1]!.status === "applied" && /couldn't be uploaded \(Hirist answered 500\)/.test(q.reports[1]!.message!), `note: ${q.reports[1]!.message}`);
+}
+
+// 10. If the main resume can't be put back before a job, stop rather than send the wrong resume.
+{
+  const q = fakeOfferloop([{ ...job(1), tailoredResume: true }, job(2), job(3)]);
+  const d = deps(q.client, { q1: { status: "APPLIED" }, q2: { status: "APPLIED" }, q3: { status: "APPLIED" } });
+  d.resume = { put: async () => {}, restore: async () => { throw new Error("upload button gone"); } };
+  const summary = await runConnectOnce(d, { dryRun: false });
+  expect(d.applied.join() === "1001", `only job 1 applied: ${d.applied.join()}`);
+  expect(q.reports[1]!.status === "requeue", "job 2 goes back to the queue");
+  expect(/upload button gone/.test(summary.stoppedBecause ?? ""), `stops with the reason: ${summary.stoppedBecause}`);
+}
+
+// 11. Not set up: tailored jobs go with the profile resume, and the result says how to turn it on.
+{
+  const q = fakeOfferloop([{ ...job(1), tailoredResume: true }]);
+  const d = deps(q.client, { q1: { status: "APPLIED" } });
+  await runConnectOnce(d, { dryRun: false });
+  expect(q.reports[0]!.status === "applied" && q.reports[0]!.message!.includes("resume:setup"), `hint: ${q.reports[0]!.message}`);
+}
+
+// 12. A crash mid-way still puts the main resume back.
+{
+  const q = fakeOfferloop([{ ...job(1), tailoredResume: true }]);
+  const d = deps(q.client, { q1: "throw" });
+  const events: string[] = [];
+  d.resume = { put: async () => void events.push("put"), restore: async () => void events.push("restore") };
+  await runConnectOnce(d, { dryRun: false });
+  expect(events.join() === "put,restore", `restored after a crash: ${events.join()}`);
 }
 
 console.log("Offerloop connect checks passed.");
