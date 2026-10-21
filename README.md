@@ -50,6 +50,8 @@ accounts, invites, Google sign-in and Gmail testers in
 [Running Offerloop](apps/platform/content/docs/running-offerloop.md).
 [`render.yaml`](render.yaml) sets up the Render service.
 
+**Azure App Service** (B1, deploys from GitHub Actions): [`deploy/AZURE.md`](deploy/AZURE.md).
+
 Any host that runs a Docker image works ([`Dockerfile`](Dockerfile); your own VM with Caddy:
 [`deploy/ORACLE.md`](deploy/ORACLE.md)). The host must allow long-running responses (tailoring
 streams progress) and run **one** copy (the scheduler lives in the process), so serverless
