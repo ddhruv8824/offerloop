@@ -134,7 +134,8 @@ domain and fetches the other site for every address outside `/offerloop`.
    **Manual Deploy → Clear build cache & deploy**.
 5. Move the custom domains (`example.com`, `www.example.com`) from the other site to the
    Offerloop service: remove them there, add them under Offerloop → **Settings → Custom
-   Domains**. The DNS records stay the same.
+   Domains**. The root's `A` record stays; point the `www` `CNAME` at the Offerloop service's
+   `onrender.com` address (Render shows it when you add the domain).
 6. Every Offerloop address gains the path:
    - pinger: `https://www.example.com/offerloop/api/automations/tick`
    - Gmail redirect URI: `https://www.example.com/offerloop/api/inbox/google/callback`
