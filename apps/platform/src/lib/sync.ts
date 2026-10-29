@@ -1,4 +1,5 @@
 "use client";
+import { withBase } from "@/lib/base-path";
 
 /**
  * Keeps the profile, tracker and DSA progress in your account, not just this browser.
@@ -55,7 +56,7 @@ async function push(name: DocName) {
   } catch {
     return;
   }
-  await fetch(`/api/me/docs/${name}`, {
+  await fetch(withBase(`/api/me/docs/${name}`), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value, updatedAt: meta.docs[name] ?? new Date().toISOString() }),
@@ -96,7 +97,7 @@ export async function startSync(accountId: string, timeoutMs = 4000): Promise<vo
 
   const work = Promise.all(
     (Object.keys(DOCS) as DocName[]).map(async (name) => {
-      const res = await fetch(`/api/me/docs/${name}`, { cache: "no-store" }).catch(() => null);
+      const res = await fetch(withBase(`/api/me/docs/${name}`), { cache: "no-store" }).catch(() => null);
       if (!res?.ok) return;
       const server = (await res.json()) as { value: unknown; updatedAt: string | null };
       const localRaw = localStorage.getItem(DOCS[name].key);

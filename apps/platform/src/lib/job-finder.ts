@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoredJob, SearchProfile } from "./jobs";
 import type { MarketRange } from "./salary";
 import type { CareerProfile } from "./types";
+import { withBase } from "@/lib/base-path";
 
 /** What /api/jobs/search returns. */
 export interface JobSearchResult {
@@ -98,7 +99,7 @@ export function useJobSearch(profile: CareerProfile | null) {
       running.current = controller;
       setState({ status: "loading", result: usable });
       try {
-        const res = await fetch("/api/jobs/search", {
+        const res = await fetch(withBase("/api/jobs/search"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ profile: toSearchProfile(profile) }),
@@ -155,7 +156,7 @@ export function useSalaryMarket(profile: CareerProfile | null): MarketState {
     }
     const controller = new AbortController();
     setState({ status: "loading" });
-    fetch("/api/jobs/market", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: toSearchProfile(profile) }), signal: controller.signal })
+    fetch(withBase("/api/jobs/market"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: toSearchProfile(profile) }), signal: controller.signal })
       .then(async (res) => {
         const data = (await res.json()) as SalaryMarketResult & { error?: string };
         if (!res.ok) throw new Error(data.error ?? "Couldn't build the salary guide.");
@@ -175,7 +176,7 @@ export function useSalaryMarket(profile: CareerProfile | null): MarketState {
 
 /** "Paste a link": read and score one posting. */
 export async function importJobLink(url: string, profile: CareerProfile): Promise<ScoredJob> {
-  const res = await fetch("/api/jobs/import", {
+  const res = await fetch(withBase("/api/jobs/import"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, profile: toSearchProfile(profile) }),

@@ -3,6 +3,7 @@ import { AuthCard, inputClass, Notice } from "@/components/auth/AuthCard";
 import { Button } from "@/components/ui";
 import { ensureMember } from "@/lib/server/auth/members";
 import { currentUser } from "@/lib/server/auth/session";
+import { withBase } from "@/lib/base-path";
 
 export const metadata = { title: "Enter your invite code · Offerloop" };
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
         </>
       }
       footer={
-        <form method="post" action="/api/auth/logout">
+        <form method="post" action={withBase("/api/auth/logout")}>
           <button type="submit" className="hover:underline">
             Use a different account
           </button>
@@ -30,7 +31,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
       }
     >
       <Notice error={error} />
-      <form method="post" action="/api/auth/join" className="space-y-3">
+      <form method="post" action={withBase("/api/auth/join")} className="space-y-3">
         <input name="code" required autoFocus autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase placeholder:font-sans placeholder:normal-case`} />
         <Button type="submit" className="w-full">
           Continue

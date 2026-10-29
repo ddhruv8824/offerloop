@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AuthCard, inputClass, Notice } from "@/components/auth/AuthCard";
 import { Button } from "@/components/ui";
+import { withBase } from "@/lib/base-path";
 
 export const metadata = { title: "Reset your password · Offerloop" };
 
@@ -17,7 +18,7 @@ export default async function ForgotPage({ searchParams }: { searchParams: Promi
       }
     >
       <Notice error={error} />
-      <form method="post" action="/api/auth/forgot" className="space-y-3">
+      <form method="post" action={withBase("/api/auth/forgot")} className="space-y-3">
         <input type="email" name="email" required autoComplete="email" defaultValue={email} aria-label="Email" placeholder="Email" className={inputClass} />
         <Button type="submit" className="w-full">
           Send reset link

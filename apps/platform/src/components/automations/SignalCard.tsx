@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, ExternalLink, Loader2, MessageCircle, RotateCw, Send, X } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { withBase } from "@/lib/base-path";
 
-const GUIDE_URL = "/docs/signal";
+const GUIDE_URL = withBase("/docs/signal");
 
 interface SignalResult {
   ok: boolean;
@@ -31,7 +32,7 @@ export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/automations/signal")
+    fetch(withBase("/api/automations/signal"))
       .then((r) => r.json())
       .then((d: { configured?: boolean; phone?: string | null; last?: SignalResult | null }) => {
         setConfigured(Boolean(d.configured));
@@ -47,7 +48,7 @@ export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/automations/signal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(withBase("/api/automations/signal"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) setError(data.error ?? "Couldn't save that.");
       else {
@@ -63,7 +64,7 @@ export function SignalCard({ waitingRunId }: { waitingRunId?: string }) {
     setBusy(what);
     setError(null);
     try {
-      const res = await fetch("/api/automations/signal", {
+      const res = await fetch(withBase("/api/automations/signal"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(what === "resend" ? { resend: waitingRunId } : {}),

@@ -10,6 +10,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Marked } from "marked";
+import { withBase } from "@/lib/base-path";
+import { configuredSite } from "./public-url";
 
 export interface DocPage {
   slug: string;
@@ -63,7 +65,7 @@ function parse(slug: string, raw: string): DocPage {
       link({ href, title, tokens }) {
         const text = this.parser.parseInline(tokens);
         const external = /^https?:\/\//.test(href);
-        return `<a href="${href}"${title ? ` title="${title}"` : ""}${external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${text}</a>`;
+        return `<a href="${external ? href : withBase(href)}"${title ? ` title="${title}"` : ""}${external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${text}</a>`;
       },
     },
   });
@@ -102,7 +104,7 @@ export async function getLegal(slug: "privacy" | "terms"): Promise<DocPage | nul
     const raw = await readFile(path.join(LEGAL, `${slug}.md`), "utf8");
     // {{contact}} and {{site}} come from the environment, so each install names its own operator.
     const contact = process.env.SUPPORT_EMAIL?.trim() || "the person who invited you to Offerloop";
-    const site = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "this website").replace(/\/+$/, "");
+    const site = configuredSite() || "this website";
     return parse(slug, raw.replaceAll("{{contact}}", contact).replaceAll("{{site}}", site));
   } catch {
     return null;

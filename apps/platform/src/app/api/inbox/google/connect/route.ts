@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { authUrl, cookieOptions, isConfigured, STATE_COOKIE } from "@/lib/server/inbox";
-import { publicOrigin, publicUrl } from "@/lib/server/public-url";
+import { publicSite, publicUrl } from "@/lib/server/public-url";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export function GET(req: NextRequest) {
     return NextResponse.redirect(publicUrl(req, "/tracker?inbox=not-configured"));
   }
   const state = randomBytes(16).toString("hex");
-  const res = NextResponse.redirect(authUrl(publicOrigin(req), state));
+  const res = NextResponse.redirect(authUrl(publicSite(req), state));
   res.cookies.set(STATE_COOKIE, state, cookieOptions(600));
   return res;
 }

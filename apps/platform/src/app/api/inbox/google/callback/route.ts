@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookieOptions, exchangeCode, seal, STATE_COOKIE, TOKEN_COOKIE } from "@/lib/server/inbox";
-import { publicOrigin, publicUrl } from "@/lib/server/public-url";
+import { publicSite, publicUrl } from "@/lib/server/public-url";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!code || !state || state !== expected) return NextResponse.redirect(back(req, "failed"));
 
   try {
-    const stored = await exchangeCode(code, publicOrigin(req));
+    const stored = await exchangeCode(code, publicSite(req));
     const res = NextResponse.redirect(back(req, "connected"));
     res.cookies.set(TOKEN_COOKIE, seal(stored), cookieOptions(60 * 60 * 24 * 180));
     res.cookies.delete(STATE_COOKIE);

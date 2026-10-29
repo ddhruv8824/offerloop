@@ -10,6 +10,7 @@ import { useProfile } from "@/lib/profile";
 import { startSync } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/lib/server/auth/gate";
+import { withBase } from "@/lib/base-path";
 
 /** Routes whose page is an embedded tool with its own full-height layout. */
 const FULL_BLEED_ROUTES = ["/resume"];
@@ -102,7 +103,7 @@ export function AppShell({ children, account }: { children: React.ReactNode; acc
             <Shield className="size-3.5" />
           </Link>
         )}
-        <form method="post" action="/api/auth/logout">
+        <form method="post" action={withBase("/api/auth/logout")}>
           <button type="submit" className="rounded p-1.5 hover:bg-paper/10 hover:text-paper" title="Log out" aria-label="Log out">
             <LogOut className="size-3.5" />
           </button>

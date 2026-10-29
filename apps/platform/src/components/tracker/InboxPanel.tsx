@@ -6,6 +6,7 @@ import { Badge, Button, Card } from "@/components/ui";
 import { rememberInboxAccount } from "@/lib/gmail-link";
 import { applyDetections, companiesToWatch, type InboxDetection, type ScanSummary, type TrackerCard } from "@/lib/tracker";
 import { cn } from "@/lib/utils";
+import { BASE_PATH, withBase } from "@/lib/base-path";
 
 interface InboxStatus {
   configured: boolean;
@@ -39,7 +40,7 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/inbox/status", { cache: "no-store" });
+      const res = await fetch(withBase("/api/inbox/status"), { cache: "no-store" });
       const next = (await res.json()) as InboxStatus;
       setStatus(next);
       rememberInboxAccount(next.connected ? next.email : null);
@@ -53,7 +54,7 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
       setBusy(sample ? "sample" : "scan");
       setMessage(null);
       try {
-        const res = await fetch("/api/inbox/scan", {
+        const res = await fetch(withBase("/api/inbox/scan"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companies: companiesToWatch(cards), days: 30, skip: processed, sample }),
@@ -95,7 +96,7 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
 
   const disconnect = async () => {
     setBusy("disconnect");
-    await fetch("/api/inbox/disconnect", { method: "POST" }).catch(() => undefined);
+    await fetch(withBase("/api/inbox/disconnect"), { method: "POST" }).catch(() => undefined);
     await loadStatus();
     setBusy(null);
     setMessage({ tone: "info", text: "Gmail disconnected and access revoked." });
@@ -141,7 +142,7 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
               {status.configured ? (
                 // A full page load (not <Link>): this route redirects to Google.
                 <a
-                  href="/api/inbox/google/connect"
+                  href={withBase("/api/inbox/google/connect")}
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-coral px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-coral-strong hover:text-paper"
                 >
                   <Mail className="size-4" /> Connect Gmail
@@ -191,7 +192,7 @@ export function InboxPanel({ cards, processed, lastScanAt }: { cards: TrackerCar
             <li>OAuth consent screen: External, add yourself as a test user, add the gmail.readonly scope.</li>
             <li>
               Credentials → OAuth client ID → Web application, redirect URI{" "}
-              <code className="rounded bg-ink/5 px-1 font-mono text-xs">{typeof window !== "undefined" ? window.location.origin : ""}/api/inbox/google/callback</code>
+              <code className="rounded bg-ink/5 px-1 font-mono text-xs">{typeof window !== "undefined" ? window.location.origin + BASE_PATH : ""}/api/inbox/google/callback</code>
             </li>
             <li>
               Put <code className="font-mono text-xs">GOOGLE_CLIENT_ID</code>, <code className="font-mono text-xs">GOOGLE_CLIENT_SECRET</code> and{" "}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthCard, Divider, GoogleButton, inputClass, Notice } from "@/components/auth/AuthCard";
 import { Button } from "@/components/ui";
 import { authMode, signupMode } from "@/lib/server/auth/config";
+import { withBase } from "@/lib/base-path";
 
 export const metadata = { title: "Create your account · Offerloop" };
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       }
     >
       <Notice error={error} />
-      <form method="post" action="/api/auth/signup" className="space-y-3">
+      <form method="post" action={withBase("/api/auth/signup")} className="space-y-3">
         <input type="email" name="email" required autoComplete="email" defaultValue={email} aria-label="Email" placeholder="Email" className={inputClass} />
         <input type="password" name="password" required minLength={8} autoComplete="new-password" aria-label="Password" placeholder="Password (8+ characters)" className={inputClass} />
         {invite && <input name="code" required defaultValue={code} autoComplete="off" aria-label="Invite code" placeholder="Invite code, e.g. OL-1A2B-3C4D" className={`${inputClass} font-mono uppercase placeholder:font-sans placeholder:normal-case`} />}
