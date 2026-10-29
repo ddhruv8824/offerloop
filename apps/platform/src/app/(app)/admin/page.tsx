@@ -3,6 +3,7 @@ import { Badge, Button, Card, CardHeader, PageHeader } from "@/components/ui";
 import { authMode, signupMode } from "@/lib/server/auth/config";
 import { listInvites, listMembers } from "@/lib/server/auth/members";
 import { requireMember } from "@/lib/server/auth/session";
+import { withBase } from "@/lib/base-path";
 
 export const metadata = { title: "Admin · Offerloop" };
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               New code: <b className="font-mono select-all">{created}</b> — send it with the sign-up link: <span className="select-all">/signup</span>
             </p>
           )}
-          <form method="post" action="/api/admin/invites" className="flex flex-col gap-2 sm:flex-row">
+          <form method="post" action={withBase("/api/admin/invites")} className="flex flex-col gap-2 sm:flex-row">
             <input name="note" placeholder="Who it's for (just for you), e.g. Priya from college" className="flex-1 rounded-md border border-line bg-paper px-3 py-2 text-sm" />
             <label className="flex items-center gap-2 text-sm text-muted">
               Uses
@@ -52,7 +53,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     {c.uses}/{c.maxUses || "∞"} used · {day(c.createdAt)}
                   </span>
                   {c.disabled && <Badge tone="neutral">Off</Badge>}
-                  <form method="post" action="/api/admin/invites">
+                  <form method="post" action={withBase("/api/admin/invites")}>
                     <input type="hidden" name="code" value={c.code} />
                     <input type="hidden" name="disable" value={c.disabled ? "0" : "1"} />
                     <button type="submit" className="text-xs font-semibold text-coral-strong hover:underline">

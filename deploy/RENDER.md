@@ -115,7 +115,36 @@ first start.
 | See logs | Render → offerloop → **Logs** |
 | Change a setting | Render → offerloop → **Environment** → edit → save |
 | See your data | Supabase → **Table Editor** → `offerloop_kv` (one row per saved item) |
-| Own domain | Render → **Settings → Custom Domains**, then set `PUBLIC_URL` to `https://` + it |
+| Own domain | Render → **Settings → Custom Domains**, then set `PUBLIC_URL` to `https://` + it (under a path: [see below](#under-a-path-on-your-own-domain-eg-examplecomofferloop)) |
+
+## Under a path on your own domain (e.g. example.com/offerloop)
+
+Offerloop can share a domain with another site: the app at `https://www.example.com/offerloop`,
+and the rest of the domain (`/`) showing, say, a portfolio. Offerloop answers for the whole
+domain and fetches the other site for every address outside `/offerloop`.
+
+1. Deploy the other site on its own (e.g. a Render **Static Site**) and note its
+   `onrender.com` address.
+2. On the Offerloop service, set (**Environment**):
+   - `BASE_PATH` = `/offerloop`
+   - `PORTFOLIO_URL` = the other site's address, e.g. `https://portfolio-xxxx.onrender.com`
+   - `PUBLIC_URL` = your domain **without** the path, e.g. `https://www.example.com`
+3. **Settings → Health Check Path** = `/offerloop/api/health`.
+4. `BASE_PATH` and `PORTFOLIO_URL` are built into the app, so after changing them run
+   **Manual Deploy → Clear build cache & deploy**.
+5. Move the custom domains (`example.com`, `www.example.com`) from the other site to the
+   Offerloop service: remove them there, add them under Offerloop → **Settings → Custom
+   Domains**. The root's `A` record stays; point the `www` `CNAME` at the Offerloop service's
+   `onrender.com` address (Render shows it when you add the domain).
+6. Every Offerloop address gains the path:
+   - pinger: `https://www.example.com/offerloop/api/automations/tick`
+   - Gmail redirect URI: `https://www.example.com/offerloop/api/inbox/google/callback`
+   - Supabase → Authentication → URL Configuration: Site URL `https://www.example.com/offerloop`,
+     redirect URL `https://www.example.com/offerloop/auth/callback`
+   - Hirist agent's `OFFERLOOP_URL`: `https://www.example.com/offerloop` (the Automations page
+     shows it)
+
+[`render.yaml`](../render.yaml) is set up this way for www.ddhruvvv.tech.
 
 ## Limits of the free plans
 

@@ -18,6 +18,7 @@ import { ImportError, importJob } from "../jobs/import";
 import { salaryMarket } from "../jobs/market";
 import { searchJobs } from "../jobs/search";
 import { indexSet, readStore, updateStore, type StoreData } from "../store";
+import { configuredSite } from "../public-url";
 
 interface StepOutcome {
   status: "done" | "skipped" | "waiting";
@@ -517,7 +518,7 @@ export async function resendApproval(uid: string, runId: string): Promise<Signal
   return sendApproval(uid, made.creds, made.run, site, made.links);
 }
 
-const siteUrl = () => (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim();
+const siteUrl = () => configuredSite();
 
 /** Record which person each link belongs to, so /a/<token> can find their run. */
 async function indexLinks(uid: string, links: MadeLinks) {

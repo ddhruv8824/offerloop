@@ -13,8 +13,18 @@ services:
     dockerContext: .
     plan: free
     region: singapore # closest to India; can't be changed after creation
-    healthCheckPath: /api/health
+    healthCheckPath: /offerloop/api/health # BASE_PATH + /api/health
     envVars:
+      # Offerloop lives at https://www.ddhruvvv.tech/offerloop; the rest of the domain shows the
+      # portfolio (a Render static site), fetched by Offerloop. See deploy/RENDER.md → "Under a path".
+      # Clear BASE_PATH and PORTFOLIO_URL (and set healthCheckPath back to /api/health) to serve
+      # Offerloop at the root of its own domain instead.
+      - key: BASE_PATH
+        value: /offerloop
+      - key: PORTFOLIO_URL
+        value: https://portfolio-lnyt.onrender.com
+      - key: PUBLIC_URL # the site's address, without the path
+        value: https://www.ddhruvvv.tech
       # Keep Node within the 512 MB instance.
       - key: NODE_OPTIONS
         value: --max-old-space-size=384

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { Card } from "@/components/ui";
+import { withBase } from "@/lib/base-path";
 
 /** The frame around every sign-in page. */
 export function AuthCard({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -49,7 +50,7 @@ export function Notice({ error, notice }: { error?: string; notice?: string }) {
 export function GoogleButton({ next }: { next?: string }) {
   return (
     <a
-      href={`/api/auth/google${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+      href={withBase(`/api/auth/google${next ? `?next=${encodeURIComponent(next)}` : ""}`)}
       className="flex w-full items-center justify-center gap-2 rounded-md border border-line bg-paper px-3 py-2 text-sm font-semibold hover:border-faint"
     >
       <svg viewBox="0 0 24 24" className="size-4" aria-hidden>

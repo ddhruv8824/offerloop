@@ -5,6 +5,7 @@ import { Button, Card } from "@/components/ui";
 import { linkJobIds } from "@/lib/server/approval-links";
 import { lookupApprovalLink } from "@/lib/server/approval-lookup";
 import { readStore } from "@/lib/server/store";
+import { withBase } from "@/lib/base-path";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Approve jobs · Offerloop", robots: { index: false, follow: false } };
@@ -79,7 +80,7 @@ export default async function ApprovalLinkPage({
           ))}
         </ul>
       )}
-      <form method="post" action={`/api/a/${encodeURIComponent(token)}`} className="mt-5">
+      <form method="post" action={withBase(`/api/a/${encodeURIComponent(token)}`)} className="mt-5">
         <Button type="submit" variant={skip ? "secondary" : "primary"} className="w-full py-3 text-base">
           {skip ? <X className="size-5" /> : <Check className="size-5" />} {skip ? "Skip this run" : "Approve"}
         </Button>

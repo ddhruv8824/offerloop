@@ -6,6 +6,7 @@ import { Button } from "@/components/ui";
 import type { ResumeFacts } from "@/lib/resume-facts";
 import { normalizeSkill, searchSkills, suggestedSkills } from "@/lib/skills";
 import { cn } from "@/lib/utils";
+import { withBase } from "@/lib/base-path";
 
 const inputClass =
   "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-ink";
@@ -23,7 +24,7 @@ export function mergeSkills(current: string[], more: string[]): string[] {
 export async function readResume(file: File): Promise<{ skills: string[]; facts: ResumeFacts }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/profile/resume-skills", { method: "POST", body: form });
+  const res = await fetch(withBase("/api/profile/resume-skills"), { method: "POST", body: form });
   const body = (await res.json().catch(() => ({}))) as { skills?: string[]; facts?: ResumeFacts; error?: string };
   if (!res.ok) throw new Error(body.error ?? "Couldn't read that resume.");
   return { skills: body.skills ?? [], facts: body.facts ?? {} };

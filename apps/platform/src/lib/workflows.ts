@@ -6,6 +6,7 @@ import { getProfile } from "./profile";
 import type { ApplyItem } from "./apply-queue";
 import { addCard, recordAgentResult, trackedUrls } from "./tracker";
 import { normaliseWorkflow, type Workflow, type WorkflowRun } from "./workflow-defs";
+import { withBase } from "@/lib/base-path";
 
 export * from "./workflow-defs";
 
@@ -63,7 +64,7 @@ const publish = (next: Snapshot) => {
 const isActive = (run: WorkflowRun) => run.status === "running";
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { cache: "no-store", ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
+  const res = await fetch(withBase(path), { cache: "no-store", ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(body.error ?? "Something went wrong. Try again.");
   return body;

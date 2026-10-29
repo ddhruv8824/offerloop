@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { withBase } from "@/lib/base-path";
 
 const loading = () => (
   <div className="grid h-full place-items-center bg-ink">
@@ -14,7 +15,7 @@ const loading = () => (
 const ResumeStudio = dynamic(() => import("@offerloop/resume-studio"), { ssr: false, loading });
 
 // Same origin: /api/redline/* runs Resume Studio's engine in this app (see app/api/redline).
-const REDLINE_API_URL = "/api/redline";
+const REDLINE_API_URL = withBase("/api/redline");
 
 // Before accounts, each browser had its own workspace id (kept here by Resume Studio). The
 // first time Resume Studio opens after signing in, that workspace moves into the account.
@@ -35,7 +36,7 @@ export default function ResumeStudioPage() {
       setReady(true);
       return;
     }
-    fetch("/api/me/import-workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: old }) })
+    fetch(withBase("/api/me/import-workspace"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: old }) })
       .then((res) => {
         if (res.ok) localStorage.setItem(IMPORTED_KEY, new Date().toISOString());
       })

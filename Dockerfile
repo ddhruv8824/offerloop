@@ -20,16 +20,27 @@ RUN pnpm install --frozen-lockfile
 COPY apps/platform ./apps/platform
 COPY modules ./modules
 COPY shared ./shared
-ENV NEXT_TELEMETRY_DISABLED=1
+# Optional: serve under a path (BASE_PATH=/offerloop) and show another site (PORTFOLIO_URL) on the
+# rest of the domain. Both are baked in at build time; Render passes the service's settings here.
+ARG BASE_PATH=""
+ARG PORTFOLIO_URL=""
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    BASE_PATH=$BASE_PATH \
+    PORTFOLIO_URL=$PORTFOLIO_URL
 RUN pnpm --filter @offerloop/platform build
 
 FROM node:22-slim
 COPY --from=build /app /app
+# `next start` reads next.config.ts again, so it must see the same values as the build.
+ARG BASE_PATH=""
+ARG PORTFOLIO_URL=""
 WORKDIR /app/apps/platform
 
 # Saved workflows (automations.json) and Resume Studio workspaces (redline/) live in /data —
 # or in a Postgres database (e.g. Supabase) when DATABASE_URL is set.
 ENV NODE_ENV=production \
+    BASE_PATH=$BASE_PATH \
+    PORTFOLIO_URL=$PORTFOLIO_URL \
     PORT=3100 \
     OFFERLOOP_DATA_DIR=/data \
     NEXT_TELEMETRY_DISABLED=1

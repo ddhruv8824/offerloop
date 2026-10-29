@@ -5,8 +5,9 @@ import { Check, Copy, ExternalLink, KeyRound, Laptop, Loader2, Unplug, X } from 
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
 import { DAILY_APPLY_LIMIT, startedToday } from "@/lib/apply-queue";
 import { createAgentKey, disconnectAgent, removeFromApplyQueue, type AgentStatus, type ApplyItem } from "@/lib/workflows";
+import { BASE_PATH, withBase } from "@/lib/base-path";
 
-const GUIDE_URL = "/docs/hirist-agent";
+const GUIDE_URL = withBase("/docs/hirist-agent");
 
 const STATUS: Record<ApplyItem["status"], { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   queued: { label: "Waiting for your PC", tone: "neutral" },
@@ -80,7 +81,7 @@ export function HiristAgentCard({ agent, queue }: { agent: AgentStatus; queue: A
       await disconnectAgent();
     });
 
-  const envLines = key ? `OFFERLOOP_URL=${typeof window === "undefined" ? "" : window.location.origin}\nOFFERLOOP_AGENT_KEY=${key}` : "";
+  const envLines = key ? `OFFERLOOP_URL=${typeof window === "undefined" ? "" : `${window.location.origin}${BASE_PATH}`}\nOFFERLOOP_AGENT_KEY=${key}` : "";
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(envLines);

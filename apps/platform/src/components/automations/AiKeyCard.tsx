@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, ExternalLink, KeyRound, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { loadLlmSettings } from "@offerloop/resume-studio/llm";
 import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { withBase } from "@/lib/base-path";
 
 interface Provider {
   id: string;
@@ -35,7 +36,7 @@ export function AiKeyCard() {
   const [studioKey, setStudioKey] = useState<{ provider: string; model: string; apiKey: string } | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/automations/ai")
+    fetch(withBase("/api/automations/ai"))
       .then((r) => r.json())
       .then((d: Status) => setStatus(d))
       .catch(() => setError("Couldn't load your AI settings."));
@@ -53,7 +54,7 @@ export function AiKeyCard() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/automations/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(withBase("/api/automations/ai"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) setError(data.error ?? "Couldn't save that.");
       else {
